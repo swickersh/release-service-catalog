@@ -1,0 +1,131 @@
+---
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: sign-binaries
+  labels:
+    app.kubernetes.io/version: "0.2.1"
+  annotations:
+    tekton.dev/pipelines.minVersion: "0.12.1"
+    tekton.dev/tags: release
+spec:
+  description: >-
+    Tekton task to sign mac and windows binaries using system specific signing hosts
+  params:
+    - name: quayURL
+      type: string
+      description: quay URL of the repo where content will be shared
+      default: "TODO CLDX-80"
+    - name: quaySecret
+      type: string
+      description: Secret to interact with Quay
+    - name: windowsCredentials
+      type: string
+      description: Secret to interact with the Windows signing host
+    - name: pipelineRunUid
+      type: string
+      description: Unique identifier for the pipeline run
+  env:
+    - name: WINDOWS_USER
+      valueFrom:
+        secretKeyRef:
+          name: $(params.windowsCredentials)
+          key: username
+    - name: WINDOWS_PASS
+      valueFrom:
+        secretKeyRef:
+          name: $(params.windowsCredentials)
+          key: password
+    - name: WINDOWS_PORT
+      valueFrom:
+        secretKeyRef:
+          name: $(params.windowsCredentials)
+          key: port
+    - name: WINDOWS_HOST
+      valueFrom:
+        secretKeyRef:
+          name: $(params.windowsCredentials)
+          key: host
+    - name: QUAY_USER
+      valueFrom:
+        secretKeyRef:
+          name: $(params.quaySecret)
+          key: username
+    - name: QUAY_PASS
+      valueFrom:
+        secretKeyRef:
+          name: $(params.quaySecret)
+          key: password
+  workspaces:
+    - name: data
+      description: Workspace to save the results to
+  results:
+    - name: unsignedWindowsDigest
+      type: string
+      description: |
+        The digest of the unsigned content pushed using ORAS for signing hosts
+    - name: signedWindowsDigest
+      type: string
+      description: |
+        The digest of the unsigned content pushed using ORAS for signing hosts
+  steps:
+    # - name: push-unsigned-using-oras
+    #   image: quay.io/konflux-ci/release-service-utils:e633d51cd41d73e4b3310face21bb980af7a662f
+    #   script: |
+    #     #!/bin/bash
+    #     # TODO CLDX-134
+    # - name: sign-mac-binaries
+    #   image: quay.io/konflux-ci/release-service-utils:e633d51cd41d73e4b3310face21bb980af7a662f
+    #   script: |
+    #     #!/bin/bash
+    #     # TODO CLDX-79
+    - name: sign-windows-binaries
+      image: quay.io/konflux-ci/release-service-utils:e633d51cd41d73e4b3310face21bb980af7a662f
+      script: |
+        #!/bin/bash
+        export SSHPASS="${WINDOWS_PASS}"
+        sshpass -e ssh -o StrictHostKeyChecking=no -p ${WINDOWS_PORT} ${WINDOWS_USER}@${WINDOWS_HOST} << EOF
+        @echo off
+
+        set SIGNTOOL="C:\Program Files (x86)\Windows Kits\10\bin\10.0.20348.0\x64\signtool.exe"
+        set ORAS="C:\Program Files\Common Files\bin\oras.exe"
+
+        mkdir %TEMP%\$(params.pipelineRunUid) && cd /d %TEMP%\$(params.pipelineRunUid)
+        %ORAS% login quay.io -u ${QUAY_USER} -p ${QUAY_PASS}
+        %ORAS% pull (params.quayURL)@(results.unsignedWindowsDigest)
+
+
+        %SIGNTOOL% sign /v /n "Red Hat" /fd SHA256 /tr http://timestamp.digicert.com /td SHA256 %TEMP%\$(params.pipelineRunUid)\unsigned\*
+        if errorlevel 1 (
+          echo Signing of binaries failed
+          exit /B %ERRORLEVEL%
+        )
+
+        %SIGNTOOL% verify /v /pa %TEMP%\$(params.pipelineRunUid)\unsigned\*
+
+        if errorlevel 1 (
+          echo Verification of binaries failed
+          exit /B %ERRORLEVEL%
+        )
+
+        echo [%DATE% %TIME%] Signing of Windows binaries completed successfully
+
+        %ORAS% push $(params.quayURL):$(params.pipelineRunUid) . > oras_push_output.txt 2>&1
+        for /f "tokens=2,3 delims=: " %a in ('findstr "Digest:" oras_push_output.txt') do @echo %a:%b > digest.txt
+
+        EOF
+
+        DIGEST=$(sshpass -e ssh -o StrictHostKeyChecking=no -p $windows_port ${WINDOWS_USER}@$windows_host \
+        "type C:\Users\Administrator\AppData\Local\Temp\$(params.pipelineRunUid)\digest.txt")
+
+        echo -n "$DIGEST" | tee $(results.signedWindowsDigest.path)
+    # - name: pull-signed-using-oras
+    #   image: quay.io/konflux-ci/release-service-utils:e633d51cd41d73e4b3310face21bb980af7a662f
+    #   script: |
+    #     #!/bin/bash
+    #     # TODO CLDX-79
+    # - name: generate-checksums
+    #   image: quay.io/konflux-ci/release-service-utils:e633d51cd41d73e4b3310face21bb980af7a662f
+    #   script: |
+    #     #!/bin/bash
+    #     # TODO CLDX-82
