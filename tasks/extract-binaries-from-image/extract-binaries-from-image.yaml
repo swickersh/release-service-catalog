@@ -53,16 +53,10 @@ spec:
 
         DATA_FILE="$(workspaces.data.path)/$(params.dataPath)"
         DESIRED_COMPONENTS_LIST=
-        if [ ! -f "${DATA_FILE}" ]; then
+        if [ ! -f "${DATA_FILE}" ] ; then
             echo "No data JSON was provided."
-        else
-          JQ_FILTER='.mapping?.components? // [] | .[] | select(has("contentGateway")) | .name'
-          DESIRED_COMPONENTS_LIST="$(jq -r "${JQ_FILTER}" "${DATA_FILE}")"
-          if [ -n "${DESIRED_COMPONENTS_LIST}" ]; then
-              echo "DESIRED_COMPONENTS_LIST: ${DESIRED_COMPONENTS_LIST}"
-          else
-              echo "No components with contentGateway found."
-          fi
+        elif [ "$(jq '."contentGateway" | has("components")' "${DATA_FILE}")" = true ]; then
+            DESIRED_COMPONENTS_LIST="$(jq -r '."contentGateway".components[].name' "${DATA_FILE}")"
         fi
 
         NUM_COMPONENTS=$(jq '.components | length' "$SNAPSHOT_SPEC_FILE")
