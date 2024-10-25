@@ -75,7 +75,7 @@ spec:
         # Grab the path of datafile and use that as workspace directory
         WORKSPACE_DIR = os.path.dirname(DATA_FILE)
         METADATA_FILE_PATH = f"{WORKSPACE_DIR}/cgw_metadata.yaml"
-        RESULT_FILE_JSON_PATH=f"{WORKSPACE_DIR}/results.json"
+        RESULT_FILE_JSON_PATH = f"{WORKSPACE_DIR}/results.json"
 
         with open(DATA_FILE, 'r') as file:
             data = json.load(file)
@@ -88,7 +88,7 @@ spec:
         components = data['contentGateway']['components']
         content_list = os.listdir(CONTENT_DIR)
 
-        # Default values for each component, 
+        # Default values for each component,
         # values from DATA_FILE takes presedence over these
         default_values_per_component = {
             'type': "FILE",
@@ -96,9 +96,10 @@ spec:
             "invisible": False
         }
 
+
         def generate_download_url(file_name):
             """
-            Generate a download URL in this format: 
+            Generate a download URL in this format:
             /content/origin/files/sha256/{checksum[:2]}{checksum}/{file_name}
             """
             prefix = "/content/origin/files/sha256"
@@ -109,6 +110,7 @@ spec:
             checksum = sha256_hash.hexdigest()
             return f"{prefix}/{checksum[:2]}/{checksum}/{file_name}"
 
+
         def generate_metadata(content_list, components):
             """
             Generate metadata for each file in
@@ -116,29 +118,51 @@ spec:
             """
             metadata = []
             for file in content_list:
-                matching_component = [
-                    data
-                    for data in components
-                    if file.startswith(data['name'])]
+                # could this instead just be a single component?
+                # for each file, we only care about one single component, right?
+                matching_component = None
+                for component in components:
+                    if file.startswith(component['name']):
+                        matching_component = component
+                        break
+                # matching_component = [
+                #     data
+                #     for data in components
+                #     if file.startswith(data['name'])]
 
                 if matching_component:
                     print("Processing file: ", file)
-                    for data in matching_component:
-                        component = data.copy()
-                        component.update({
-                            'productName': productName,
-                            'productCode': productCode,
-                            'productVersionName': productVersionName,
-                            'downloadURL': generate_download_url(file),
-                            'shortURL': f"/cgw/{productCode}/{file}",
-                            'label': file,
-                        })
-                        del component['name']
-                        metadata.append({
-                            'type': 'file',
-                            'action': 'create',
-                            'metadata': {**default_values_per_component, **component}
-                        })
+                    matching_component.update({
+                        'productName': productName,
+                        'productCode': productCode,
+                        'productVersionName': productVersionName,
+                        'downloadURL': generate_download_url(file),
+                        'shortURL': f"/cgw/{productCode}/{file}",
+                        'label': file,
+                    })
+                    del matching_component['name']
+                    metadata.append({
+                        'type': 'file',
+                        'action': 'create',
+                        'metadata': {**default_values_per_component, **component}
+                    })
+
+                    # for data in matching_component:
+                    #     component = data.copy()
+                    #     component.update({
+                    #         'productName': productName,
+                    #         'productCode': productCode,
+                    #         'productVersionName': productVersionName,
+                    #         'downloadURL': generate_download_url(file),
+                    #         'shortURL': f"/cgw/{productCode}/{file}",
+                    #         'label': file,
+                    #     })
+                    #     del component['name']
+                    #     metadata.append({
+                    #         'type': 'file',
+                    #         'action': 'create',
+                    #         'metadata': {**default_values_per_component, **component}
+                    #     })
 
                 else:
                     if file.startswith('sha256'):
@@ -171,6 +195,7 @@ spec:
 
             return metadata
 
+
         metadata = generate_metadata(content_list, components)
         print(len(metadata), "Files will be publised to CGW")
 
@@ -178,28 +203,29 @@ spec:
             yaml.dump(metadata, file, default_flow_style=False, sort_keys=False)
 
         print(f"YAML content dumped to {METADATA_FILE_PATH}")
+        os.environ["CGW_PASSWORD"] = '${CGW_TOKEN}'
         command = [
             'push-cgw-metadata',
             '--CGW_hostname', '$(params.cgwHostname)',
             '--CGW_username', '${CGW_USERNAME}',
-            '--CGW_password', '${CGW_TOKEN}',
             '--CGW_filepath', METADATA_FILE_PATH
         ]
 
         try:
             result = subprocess.run(command, capture_output=True, text=True)
-            command_output = result.stderr # using stderr to capture logged output
+            command_output = result.stderr  # using stderr to capture logged output
             print(f"Command succeeded with {command_output}")
         except subprocess.CalledProcessError as error:
             print(f"Command failed with return code {error.returncode}")
             command_output = error.stderr
 
-        result_data = {"no_of_files_processed": len(metadata), 
-                      "metadata_file_path": METADATA_FILE_PATH, 
+        result_data = {"no_of_files_processed": len(metadata),
+                      "metadata_file_path": METADATA_FILE_PATH,
                       "command_output": command_output}
 
         with open(RESULT_FILE_JSON_PATH, 'w') as f:
             json.dump(result_data, f)
         with open('$(results.resultDataPath.path)', 'w') as f:
             f.write(RESULT_FILE_JSON_PATH)
+
         EOF
