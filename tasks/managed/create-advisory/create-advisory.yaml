@@ -99,9 +99,9 @@ spec:
         # only 2 gitlab instances are permitted...prod and staging
         # these are their secret names
         #
-        prodSecretName="create-advisory-prod-secret"
+        prodSecretName="create-advisory-poc-secret"
         prodErrataSecretName="errata-prod-service-account"
-        stagingSecretName="create-advisory-stage-secret"
+        stagingSecretName="create-advisory-poc-secret"
         stagingErrataSecretName="errata-stage-service-account"
         #
         # detect which one to use based on repositories specified
