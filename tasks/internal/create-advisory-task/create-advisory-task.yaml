@@ -228,14 +228,27 @@ spec:
           ADVISORY_FILEPATH="${ADVISORY_DIR}/advisory.yaml"
           ADVISORY_NAME="${YEAR}:${ADVISORY_NUM}"
 
+
           # Prepare variables for the advisory template
-          DATA=$(jq -c '{"advisory":{"spec":.}}' <<< "$advisoryJsonWithKey")
+          DATA=$(jq -c '{
+            advisory: {
+              spec: .,
+              product_stream: "test-stream",
+              cpe: "cpe:/a:redhat:releng_test_product:1.2"
+            }
+          }' <<< "$advisoryJsonWithKey")
+
+          # Add top-level advisory_name and ship_date
           DATA=$(jq -c --arg advisory_name "$ADVISORY_NAME" --arg advisory_ship_date "$SHIP_DATE" \
-            '$ARGS.named + .' <<< "$DATA")
+            '.advisory += {
+              "advisory_name": $advisory_name,
+              "advisory_ship_date": $advisory_ship_date
+            }' <<< "$DATA")
 
           # Create advisory file
           /home/utils/apply_template.py -o "$ADVISORY_FILEPATH" --data "$DATA" \
             --template /home/templates/advisory.yaml.jinja
+
 
           # Ensure the created advisory file passes the advisory schema
           check-jsonschema --schemafile schema/advisory.json "$ADVISORY_FILEPATH" 2> "$STDERR_FILE"
