@@ -325,63 +325,65 @@ spec:
           workspace: release-workspace
       runAfter:
         - verify-enterprise-contract
-    - name: update-component-sbom
-      timeout: "4h"  # temp workaround until github.com/konflux-ci/release-service/issues/603 is fixed
-      when:
-        - input: "$(tasks.collect-atlas-params.results.secretName)"
-          operator: notin
-          values: [""]
-      taskRef:
-        params:
-          - name: url
-            value: $(params.taskGitUrl)
-          - name: revision
-            value: $(params.taskGitRevision)
-          - name: pathInRepo
-            value: tasks/managed/update-component-sbom/update-component-sbom.yaml
-        resolver: git
-      workspaces:
-        - name: data
-          workspace: release-workspace
-      params:
-        - name: sbomJsonPath
-          value: "$(tasks.populate-release-notes.results.sbomDataPath)"
-        - name: downloadedSbomPath
-          value: "$(tasks.push-rpm-data-to-pyxis.results.sbomPath)"
-      runAfter:
-        - collect-data
-        - collect-atlas-params
-        - push-artifacts-to-cdn
-        - populate-release-notes
-    - name: upload-component-sbom
-      timeout: "4h"  # temp workaround until github.com/konflux-ci/release-service/issues/603 is fixed
-      when:
-        - input: "$(tasks.collect-atlas-params.results.secretName)"
-          operator: notin
-          values: [""]
-      params:
-        - name: sbomDir
-          value: "$(tasks.push-rpm-data-to-pyxis.results.sbomPath)"
-        - name: atlasSecretName
-          value: "$(tasks.collect-atlas-params.results.secretName)"
-        - name: ssoTokenUrl
-          value: "$(tasks.collect-atlas-params.results.ssoTokenUrl)"
-        - name: bombasticApiUrl
-          value: "$(tasks.collect-atlas-params.results.bombasticApiUrl)"
-      taskRef:
-        params:
-          - name: url
-            value: $(params.taskGitUrl)
-          - name: revision
-            value: $(params.taskGitRevision)
-          - name: pathInRepo
-            value: tasks/managed/upload-sbom-to-atlas/upload-sbom-to-atlas.yaml
-        resolver: git
-      workspaces:
-        - name: data
-          workspace: release-workspace
-      runAfter:
-        - update-component-sbom
+    # - name: update-component-sbom
+    #   timeout: "4h"  # temp workaround until github.com/konflux-ci/release-service/issues/603 is fixed
+    #   when:
+    #     - input: "$(tasks.collect-atlas-params.results.secretName)"
+    #       operator: notin
+    #       values: [""]
+    #   taskRef:
+    #     params:
+    #       - name: url
+    #         value: $(params.taskGitUrl)
+    #       - name: revision
+    #         value: $(params.taskGitRevision)
+    #       - name: pathInRepo
+    #         value: tasks/managed/update-component-sbom/update-component-sbom.yaml
+    #     resolver: git
+    #   workspaces:
+    #     - name: data
+    #       workspace: release-workspace
+    #   params:
+    #     - name: sbomJsonPath
+    #       value: "$(tasks.populate-release-notes.results.sbomDataPath)"
+    #     - name: downloadedSbomPath
+    #       # value: "$(tasks.push-rpm-data-to-pyxis.results.sbomPath)"
+    #       value: "/"
+    #   runAfter:
+    #     - collect-data
+    #     - collect-atlas-params
+    #     - push-artifacts-to-cdn
+    #     - populate-release-notes
+    # - name: upload-component-sbom
+    #   timeout: "4h"  # temp workaround until github.com/konflux-ci/release-service/issues/603 is fixed
+    #   when:
+    #     - input: "$(tasks.collect-atlas-params.results.secretName)"
+    #       operator: notin
+    #       values: [""]
+    #   params:
+    #     - name: sbomDir
+    #       # value: "$(tasks.push-rpm-data-to-pyxis.results.sbomPath)"
+    #       value: "/"
+    #     - name: atlasSecretName
+    #       value: "$(tasks.collect-atlas-params.results.secretName)"
+    #     - name: ssoTokenUrl
+    #       value: "$(tasks.collect-atlas-params.results.ssoTokenUrl)"
+    #     - name: bombasticApiUrl
+    #       value: "$(tasks.collect-atlas-params.results.bombasticApiUrl)"
+    #   taskRef:
+    #     params:
+    #       - name: url
+    #         value: $(params.taskGitUrl)
+    #       - name: revision
+    #         value: $(params.taskGitRevision)
+    #       - name: pathInRepo
+    #         value: tasks/managed/upload-sbom-to-atlas/upload-sbom-to-atlas.yaml
+    #     resolver: git
+    #   workspaces:
+    #     - name: data
+    #       workspace: release-workspace
+    #   runAfter:
+    #     - update-component-sbom
     - name: collect-atlas-params
       timeout: "4h"  # temp workaround until github.com/konflux-ci/release-service/issues/603 is fixed
       taskRef:
