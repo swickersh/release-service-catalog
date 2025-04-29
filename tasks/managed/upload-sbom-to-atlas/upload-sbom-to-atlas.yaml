@@ -72,7 +72,7 @@ spec:
         version_lesser_equal() {
           local first
           first="$(printf "%s\n%s" "$1" "$2" | sort --version-sort | head -n 1)"
-        
+
           if [ "$1" = "$first" ]; then
             echo "SBOM version ($1) is supported (<= $2), will not convert"
           else
@@ -141,7 +141,7 @@ spec:
     - name: convert-sboms-if-needed
       image: quay.io/konflux-ci/release-service-utils:80a575e7e12d32f866a6105827804f2f122cea73
       script: |
-        #!/usr/bin/env bash    
+        #!/usr/bin/env bash
         set -o errexit -o pipefail -o nounset
 
         workdir="$(workspaces.data.path)/workdir"
@@ -173,63 +173,63 @@ spec:
         - name: atlas-secret
           mountPath: /secrets/
       script: |
-        #!/usr/bin/env bash    
+        #!/usr/bin/env bash
         set -o errexit -o pipefail -o nounset
 
-        sbomsDir="$(workspaces.data.path)/$(params.sbomDir)"
-        workdir="$(workspaces.data.path)/workdir"
+        # sbomsDir="$(workspaces.data.path)/$(params.sbomDir)"
+        # workdir="$(workspaces.data.path)/workdir"
 
-        shopt -s nullglob
-        sboms_to_upload=("$workdir"/*.json)
+        # shopt -s nullglob
+        # sboms_to_upload=("$workdir"/*.json)
 
-        if [[ "${#sboms_to_upload[@]}" -eq 0 ]]; then
-          echo "No SBOMs to upload"
-          exit 0
-        fi
+        # if [[ "${#sboms_to_upload[@]}" -eq 0 ]]; then
+        #   echo "No SBOMs to upload"
+        #   exit 0
+        # fi
 
-        httpRetries=$(params.httpRetries)
-        curl_opts=(--silent --show-error --fail-with-body --retry "$httpRetries")
+        # httpRetries=$(params.httpRetries)
+        # curl_opts=(--silent --show-error --fail-with-body --retry "$httpRetries")
 
-        sso_account="$(cat /secrets/sso_account)"
-        sso_token="$(cat /secrets/sso_token)"
+        # sso_account="$(cat /secrets/sso_account)"
+        # sso_token="$(cat /secrets/sso_token)"
 
-        for sbom_path in "${sboms_to_upload[@]}"; do
-          original_sbom_relpath="$(realpath "$sbom_path" --relative-base="$sbomsDir")"
-          echo "--- Processing $original_sbom_relpath ---"
+        # for sbom_path in "${sboms_to_upload[@]}"; do
+        #   original_sbom_relpath="$(realpath "$sbom_path" --relative-base="$sbomsDir")"
+        #   echo "--- Processing $original_sbom_relpath ---"
 
-          ssoTokenUrl=$(params.ssoTokenUrl)
-          echo "Getting SSO token from $ssoTokenUrl"
+        #   ssoTokenUrl=$(params.ssoTokenUrl)
+        #   echo "Getting SSO token from $ssoTokenUrl"
 
-          token_response="$(
-            curl -X POST "${curl_opts[@]}" \
-              -d "grant_type=client_credentials" \
-              -d "client_id=$sso_account" \
-              -d "client_secret=$sso_token" \
-              "$ssoTokenUrl"
-            )"
+        #   token_response="$(
+        #     curl -X POST "${curl_opts[@]}" \
+        #       -d "grant_type=client_credentials" \
+        #       -d "client_id=$sso_account" \
+        #       -d "client_secret=$sso_token" \
+        #       "$ssoTokenUrl"
+        #     )"
 
-          # https://www.rfc-editor.org/rfc/rfc6749.html#section-5.1
-          access_token="$(jq -r .access_token <<< "$token_response")"
-          expires_in="$(jq -r ".expires_in // empty" <<< "$token_response")"
+        #   # https://www.rfc-editor.org/rfc/rfc6749.html#section-5.1
+        #   access_token="$(jq -r .access_token <<< "$token_response")"
+        #   expires_in="$(jq -r ".expires_in // empty" <<< "$token_response")"
 
-          retry_max_time=0  # no limit
-          if [[ -n "$expires_in" ]]; then
-            retry_max_time="$expires_in"
-          fi
+        #   retry_max_time=0  # no limit
+        #   if [[ -n "$expires_in" ]]; then
+        #     retry_max_time="$expires_in"
+        #   fi
 
-          sbom_id="$(basename -s .json "$sbom_path")"
-          supported_version_of_sbom="${sbom_path}.supported_version"
+        #   sbom_id="$(basename -s .json "$sbom_path")"
+        #   supported_version_of_sbom="${sbom_path}.supported_version"
 
-          bombasticApiUrl=$(params.bombasticApiUrl)
-          echo "Uploading SBOM to $bombasticApiUrl (with id=$sbom_id)"
+        #   bombasticApiUrl=$(params.bombasticApiUrl)
+        #   echo "Uploading SBOM to $bombasticApiUrl (with id=$sbom_id)"
 
-          curl -X PUT "${curl_opts[@]}" \
-            --retry-max-time "$retry_max_time" \
-            -H "authorization: Bearer $access_token" \
-            -H "transfer-encoding: chunked" \
-            -H "content-type: application/json" \
-            --data "@$supported_version_of_sbom" \
-            "$bombasticApiUrl/api/v1/sbom?id=$sbom_id" \
-            || echo "SBOM upload to Atlas has failed!"
+        #   curl -X PUT "${curl_opts[@]}" \
+        #     --retry-max-time "$retry_max_time" \
+        #     -H "authorization: Bearer $access_token" \
+        #     -H "transfer-encoding: chunked" \
+        #     -H "content-type: application/json" \
+        #     --data "@$supported_version_of_sbom" \
+        #     "$bombasticApiUrl/api/v1/sbom?id=$sbom_id" \
+        #     || echo "SBOM upload to Atlas has failed!"
 
-        done
+        # done

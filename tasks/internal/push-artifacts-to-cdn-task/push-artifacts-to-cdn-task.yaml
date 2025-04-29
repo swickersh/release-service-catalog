@@ -23,6 +23,7 @@ spec:
     - name: author
       type: string
       description: Author taken from Release to be used for checksum signing
+      default: "swickers@redhat.com"
     - name: quayURL
       type: string
       description: quay URL of the repo where content will be shared
@@ -983,7 +984,7 @@ spec:
                  "in the Developer Portal. Failing" >&2
             exit 1
           fi
-           
+
           productCode="$(jq -r '.productCode' <<< "${contentGatewayConfig}")"
           if [ "${productCode}" == "null" ]; then
             echo "Missing contentGateway.productCode value for component. This should be an existing product" >&2

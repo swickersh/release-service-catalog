@@ -1,4 +1,4 @@
-# push-artifacts-to-cdn-advisory-poc pipeline
+# push-artifacts-to-cdn pipeline
 
 Tekton Pipeline to push artifacts to either CDN and/or CGW with signing.
 It uses InternalRequests so that it can be run on both public and private clusters.
@@ -20,3 +20,7 @@ It uses InternalRequests so that it can be run on both public and private cluste
 | verify_ec_task_git_revision     | The git revision to be used when consuming the verify-conforma task                                                                 | No       | -                                                         |
 | taskGitUrl                      | The url to the git repo where the release-service-catalog tasks to be used are stored                                               | Yes      | https://github.com/konflux-ci/release-service-catalog.git |
 | taskGitRevision                 | The revision in the taskGitUrl repo to be used                                                                                      | No       | -                                                         |
+
+## Changes in 0.1.0
+* Add new parameter `verify_ec_task_git_revision` needed for consuming the verify-conforma task
+  via git resolver
