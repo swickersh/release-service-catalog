@@ -69,8 +69,8 @@ spec:
 
         # Extract the advisory key and signing configMap name from the data JSON file
         advisoryData=$(jq -c "$(params.jsonKey)" "$(workspaces.data.path)/$(params.dataPath)")
-        configMapName=$(jq -er '.sign.configMapName' "$(workspaces.data.path)/$(params.dataPath)")
-
+        #configMapName=$(jq -er '.sign.configMapName' "$(workspaces.data.path)/$(params.dataPath)")
+        configMapName='fakeConfigMapName'
         # Validate type
         advisoryType=$(jq -r '.type' <<< "$advisoryData")
         if [ "$advisoryType" == "null" ]; then

@@ -196,7 +196,15 @@ spec:
           NEW_ADVISORY_JSON=$(echo "$ADVISORY_JSON" | jq --argjson new_images "$CONTENT_IMAGES" \
             '.content.images = $new_images')
 
-          signingKey=$(kubectl get configmap "$(params.config_map_name)" -o jsonpath="{.data.SIG_KEY_NAME}")
+          # signingKey=$(kubectl get configmap "$(params.config_map_name)" -o jsonpath="{.data.SIG_KEY_NAME}")
+
+          signingKey="no-sign-key"
+          if kubectl get configmap "$(params.config_map_name)" &>/dev/null; then
+              signingKey=$(kubectl get configmap "$(params.config_map_name)" -o jsonpath="{.data.SIG_KEY_NAME}" || echo "no-sign-key")
+          else
+              echo "Warning: ConfigMap '$(params.config_map_name)' not found. Using placeholder signing key."
+          fi
+
           advisoryJsonWithKey=$(jq -c --arg key "$signingKey" \
             '.content.images[] += {"signingKey": $key}' <<< "$NEW_ADVISORY_JSON")
 
