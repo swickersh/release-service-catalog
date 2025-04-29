@@ -56,7 +56,8 @@ spec:
         do
             component=$(jq -c --argjson i "$i" '.components[$i]' "${SNAPSHOT_FILE}")
             name=$(jq -r '.name' <<< "$component")
-            deliveryRepo=$(jq -er '."rh-registry-repo"' <<< "$component")
+            # deliveryRepo=$(jq -er '."rh-registry-repo"' <<< "$component")
+            deliveryRepo="some_fake_registry_repo"
             tags=$(jq -c '.tags' <<< "$component")
             image=$(jq -r '.containerImage' <<< "$component")
             if ! [[ "$image" =~ ^[^:]+@sha256:[0-9a-f]+$ ]] ; then
