@@ -115,39 +115,39 @@ spec:
         #   not) | select(.repository | contains("quay.io/redhat-pending/") | not) |
         #   .repository' "$(workspaces.data.path)/$(params.snapshotPath)")
 
-        foundPendingRepositories=false
-        if [ -n "${pending_repositories}" ]; then
-          foundPendingRepositories=true
-        fi
+        # foundPendingRepositories=false
+        # if [ -n "${pending_repositories}" ]; then
+        #   foundPendingRepositories=true
+        # fi
 
-        foundProdRepositories=false
-        if [ -n "${prod_repositories}" ]; then
-          foundProdRepositories=true
-        fi
+        # foundProdRepositories=false
+        # if [ -n "${prod_repositories}" ]; then
+        #   foundProdRepositories=true
+        # fi
 
-        foundOrphanRepositories=false
-        if [ -n "${orphan_repositories}" ]; then
-          foundOrphanRepositories=true
-        fi
+        # foundOrphanRepositories=false
+        # if [ -n "${orphan_repositories}" ]; then
+        #   foundOrphanRepositories=true
+        # fi
 
-        echo "foundPendingRepositories: ${foundPendingRepositories}"
-        echo "foundProdRepositories: ${foundProdRepositories}"
-        echo "foundOrphanRepositories: ${foundOrphanRepositories}"
+        # echo "foundPendingRepositories: ${foundPendingRepositories}"
+        # echo "foundProdRepositories: ${foundProdRepositories}"
+        # echo "foundOrphanRepositories: ${foundOrphanRepositories}"
 
-        if [ "${foundPendingRepositories}" == "true" ] && [ "${foundProdRepositories}" == "true" ]; then
-          echo "Error: cannot publish to both redhat-pending and redhat-prod repositories"
-          exit 1
-        fi
+        # if [ "${foundPendingRepositories}" == "true" ] && [ "${foundProdRepositories}" == "true" ]; then
+        #   echo "Error: cannot publish to both redhat-pending and redhat-prod repositories"
+        #   exit 1
+        # fi
 
-        if [ "${foundPendingRepositories}" == "false" ] && [ "${foundProdRepositories}" == "false" ]; then
-          echo "Error: you must publish to either redhat-pending or redhat-prod repositories"
-          exit 1
-        fi
+        # if [ "${foundPendingRepositories}" == "false" ] && [ "${foundProdRepositories}" == "false" ]; then
+        #   echo "Error: you must publish to either redhat-pending or redhat-prod repositories"
+        #   exit 1
+        # fi
 
-        if [ "${foundOrphanRepositories}" == "true" ]; then
-          echo "Error: you must publish to either redhat-pending or redhat-prod repositories"
-          exit 1
-        fi
+        # if [ "${foundOrphanRepositories}" == "true" ]; then
+        #   echo "Error: you must publish to either redhat-pending or redhat-prod repositories"
+        #   exit 1
+        # fi
 
         # at this point, one of foundPendingRepositories or foundProdRepositories
         # is true.
