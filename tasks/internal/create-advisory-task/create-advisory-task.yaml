@@ -231,7 +231,7 @@ spec:
 
           # Ensure required fields are present before wrapping
           advisoryJsonWithKey=$(jq -c '
-            .product_stream = (.product_stream // "1.2") |
+            .product_stream = (.product_stream // "v1.2") |
             .cpe = (.cpe // "cpe:/a:redhat:releng_test_product:1.2") |
             .issues.fixed = (.issues.fixed // []) |
             .references = (.references // [])
