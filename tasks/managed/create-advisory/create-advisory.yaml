@@ -4,7 +4,7 @@ kind: Task
 metadata:
   name: create-advisory
   labels:
-    app.kubernetes.io/version: "6.1.2"
+    app.kubernetes.io/version: "5.1.1"
   annotations:
     tekton.dev/pipelines.minVersion: "0.12.1"
     tekton.dev/tags: release
@@ -39,34 +39,9 @@ spec:
     - name: pipelineRunUid
       type: string
       description: The uid of the current pipelineRun. Used as a label value when creating internal requests
-    - name: ociStorage
-      description: The OCI repository where the Trusted Artifacts are stored.
-      type: string
-      default: "empty"
-    - name: ociArtifactExpiresAfter
-      description: Expiration date for the trusted artifacts created in the
-        OCI repository. An empty string means the artifacts do not expire.
-      type: string
-      default: "1d"
-    - name: trustedArtifactsDebug
-      description: Flag to enable debug logging in trusted artifacts. Set to a non-empty string to enable.
-      type: string
-      default: ""
-    - name: orasOptions
-      description: oras options to pass to Trusted Artifacts calls
-      type: string
-      default: ""
-    - name: sourceDataArtifact
-      type: string
-      description: Location of trusted artifacts to be used to populate data directory
-      default: ""
-    - name: dataDir
-      description: The location where data will be stored
-      type: string
-      default: $(workspaces.data.path)
     - name: taskGitUrl
       type: string
-      description: The url to the git repo where the release-service-catalog tasks and stepactions to be used are stored
+      description: The url to the git repo where the release-service-catalog tasks to be used are stored
     - name: taskGitRevision
       type: string
       description: The revision in the taskGitUrl repo to be used
@@ -76,83 +51,26 @@ spec:
   results:
     - name: advisory_url
       description: The advisory url if one was created
-    - name: advisory_internal_url
-      description: The advisory internal url if one was created
-    - description: Produced trusted data artifact
-      name: sourceDataArtifact
-      type: string
-  volumes:
-    - name: workdir
-      emptyDir: {}
-  stepTemplate:
-    volumeMounts:
-      - mountPath: /var/workdir
-        name: workdir
-    env:
-      - name: IMAGE_EXPIRES_AFTER
-        value: $(params.ociArtifactExpiresAfter)
-      - name: "ORAS_OPTIONS"
-        value: "$(params.orasOptions)"
-      - name: "DEBUG"
-        value: "$(params.trustedArtifactsDebug)"
   steps:
-    - name: skip-trusted-artifact-operations
-      ref:
-        resolver: "git"
-        params:
-          - name: url
-            value: $(params.taskGitUrl)
-          - name: revision
-            value: $(params.taskGitRevision)
-          - name: pathInRepo
-            value: stepactions/skip-trusted-artifact-operations/skip-trusted-artifact-operations.yaml
-      params:
-        - name: ociStorage
-          value: $(params.ociStorage)
-        - name: workDir
-          value: $(params.dataDir)
-    - name: use-trusted-artifact
-      ref:
-        resolver: "git"
-        params:
-          - name: url
-            value: $(params.taskGitUrl)
-          - name: revision
-            value: $(params.taskGitRevision)
-          - name: pathInRepo
-            value: stepactions/use-trusted-artifact/use-trusted-artifact.yaml
-      params:
-        - name: workDir
-          value: $(params.dataDir)
-        - name: sourceDataArtifact
-          value: $(params.sourceDataArtifact)
     - name: run-script
       image: quay.io/konflux-ci/release-service-utils:0f82be4be43294b6a96846d87ef7f7c0b9e34267
       script: |
         #!/bin/bash
-        set -exo pipefail
+        set -ex
 
         DEFAULT_ADVISORY_TYPE="RHBA"
-        RESULTS_FILE="$(params.dataDir)/$(params.resultsDirPath)/create-advisory-results.json"
+        RESULTS_FILE="$(workspaces.data.path)/$(params.resultsDirPath)/create-advisory-results.json"
 
         # Obtain application from snapshot
-        application=$(jq -r .application "$(params.dataDir)/$(params.snapshotPath)")
+        application=$(jq -r .application "$(workspaces.data.path)/$(params.snapshotPath)")
 
         # Obtain origin workspace from releasePlanAdmission
-        origin=$(jq -r '.spec.origin' "$(params.dataDir)/$(params.releasePlanAdmissionPath)")
+        origin=$(jq -r '.spec.origin' "$(workspaces.data.path)/$(params.releasePlanAdmissionPath)")
 
         # Extract the advisory key and signing configMap name from the data JSON file
-        advisoryData=$(jq -c "$(params.jsonKey)" "$(params.dataDir)/$(params.dataPath)")
-        configMapName=$(jq -er '.sign.configMapName' "$(params.dataDir)/$(params.dataPath)")
-
-        # Check custom advisory live id
-        advisoryLiveId=$(jq -r '.live_id' <<< "$advisoryData")
-        advisoryAllowCustomLiveId=$(jq -r '.allow_custom_live_id // false' <<< "$advisoryData")
-        if [ "$advisoryAllowCustomLiveId" != true ] && [ "$advisoryLiveId" != "null" ]; then
-          echo "Error: advisory live id is only allowed if allow_custom_live_id is set to true"
-          exit 1
-        fi
-
+        advisoryData=$(jq -c "$(params.jsonKey)" "$(workspaces.data.path)/$(params.dataPath)")
+        #configMapName=$(jq -er '.sign.configMapName' "$(workspaces.data.path)/$(params.dataPath)")
+        configMapName='fakeConfigMapName'
         # Validate type
         advisoryType=$(jq -r '.type' <<< "$advisoryData")
         if [ "$advisoryType" == "null" ]; then
@@ -181,55 +99,55 @@ spec:
         # only 2 gitlab instances are permitted...prod and staging
         # these are their secret names
         #
-        prodSecretName="create-advisory-prod-secret"
-        prodErrataSecretName="errata-prod-service-account"
-        stagingSecretName="create-advisory-stage-secret"
+        prodSecretName="create-advisory-poc-secret"
+        prodErrataSecretName="errata-stage-service-account"
+        stagingSecretName="create-advisory-poc-secret"
         stagingErrataSecretName="errata-stage-service-account"
         #
         # detect which one to use based on repositories specified
         #
-        pending_repositories=$(jq -r '.components[] | select(.repository |
-          contains("quay.io/redhat-pending/")) |
-          .repository' "$(params.dataDir)/$(params.snapshotPath)")
-        prod_repositories=$(jq -r '.components[] | select(.repository | contains("quay.io/redhat-prod/")) |
-          .repository' "$(params.dataDir)/$(params.snapshotPath)")
-        orphan_repositories=$(jq -r '.components[] | select(.repository | contains("quay.io/redhat-prod/") |
-          not) | select(.repository | contains("quay.io/redhat-pending/") | not) |
-          .repository' "$(params.dataDir)/$(params.snapshotPath)")
+        # pending_repositories=$(jq -r '.components[] | select(.repository |
+        #   contains("quay.io/redhat-pending/")) |
+        #   .repository' "$(workspaces.data.path)/$(params.snapshotPath)")
+        # prod_repositories=$(jq -r '.components[] | select(.repository | contains("quay.io/redhat-prod/")) |
+        #   .repository' "$(workspaces.data.path)/$(params.snapshotPath)")
+        # orphan_repositories=$(jq -r '.components[] | select(.repository | contains("quay.io/redhat-prod/") |
+        #   not) | select(.repository | contains("quay.io/redhat-pending/") | not) |
+        #   .repository' "$(workspaces.data.path)/$(params.snapshotPath)")
 
-        foundPendingRepositories=false
-        if [ -n "${pending_repositories}" ]; then
-          foundPendingRepositories=true
-        fi
+        # foundPendingRepositories=false
+        # if [ -n "${pending_repositories}" ]; then
+        #   foundPendingRepositories=true
+        # fi
 
-        foundProdRepositories=false
-        if [ -n "${prod_repositories}" ]; then
-          foundProdRepositories=true
-        fi
+        # foundProdRepositories=false
+        # if [ -n "${prod_repositories}" ]; then
+        #   foundProdRepositories=true
+        # fi
 
-        foundOrphanRepositories=false
-        if [ -n "${orphan_repositories}" ]; then
-          foundOrphanRepositories=true
-        fi
+        # foundOrphanRepositories=false
+        # if [ -n "${orphan_repositories}" ]; then
+        #   foundOrphanRepositories=true
+        # fi
 
-        echo "foundPendingRepositories: ${foundPendingRepositories}"
-        echo "foundProdRepositories: ${foundProdRepositories}"
-        echo "foundOrphanRepositories: ${foundOrphanRepositories}"
+        # echo "foundPendingRepositories: ${foundPendingRepositories}"
+        # echo "foundProdRepositories: ${foundProdRepositories}"
+        # echo "foundOrphanRepositories: ${foundOrphanRepositories}"
 
-        if [ "${foundPendingRepositories}" == "true" ] && [ "${foundProdRepositories}" == "true" ]; then
-          echo "Error: cannot publish to both redhat-pending and redhat-prod repositories"
-          exit 1
-        fi
+        # if [ "${foundPendingRepositories}" == "true" ] && [ "${foundProdRepositories}" == "true" ]; then
+        #   echo "Error: cannot publish to both redhat-pending and redhat-prod repositories"
+        #   exit 1
+        # fi
 
-        if [ "${foundPendingRepositories}" == "false" ] && [ "${foundProdRepositories}" == "false" ]; then
-          echo "Error: you must publish to either redhat-pending or redhat-prod repositories"
-          exit 1
-        fi
+        # if [ "${foundPendingRepositories}" == "false" ] && [ "${foundProdRepositories}" == "false" ]; then
+        #   echo "Error: you must publish to either redhat-pending or redhat-prod repositories"
+        #   exit 1
+        # fi
 
-        if [ "${foundOrphanRepositories}" == "true" ]; then
-          echo "Error: you must publish to either redhat-pending or redhat-prod repositories"
-          exit 1
-        fi
+        # if [ "${foundOrphanRepositories}" == "true" ]; then
+        #   echo "Error: you must publish to either redhat-pending or redhat-prod repositories"
+        #   exit 1
+        # fi
 
         # at this point, one of foundPendingRepositories or foundProdRepositories
         # is true.
@@ -241,7 +159,7 @@ spec:
           errataSecretName="${stagingErrataSecretName}"
         fi
 
-        IR_FILE="$(params.dataDir)/$(context.task.name)/ir-result.txt"
+        IR_FILE="$(workspaces.data.path)/$(context.task.name)/ir-result.txt"
         mkdir -p "$(dirname "$IR_FILE")"
 
         echo "Creating InternalRequest to create advisory..."
@@ -256,7 +174,8 @@ spec:
                          -p taskGitRevision="$(params.taskGitRevision)" \
                          -s "$(params.synchronously)" \
                          -l ${pipelinerun_label}="$(params.pipelineRunUid)" \
-                         | tee "$IR_FILE" || exit 1
+                         > "$IR_FILE" || \
+                         (grep "^\[" "$IR_FILE" | jq . && exit 1)
 
         internalRequest=$(awk -F"'" '/created/ { print $2 }' "$IR_FILE")
         echo "done (${internalRequest})"
@@ -279,39 +198,4 @@ spec:
 
         URL=$(echo "${results}" | jq -r '.advisory_url // ""')
         echo -n "$URL" | tee "$(results.advisory_url.path)"
-        INTERNAL_URL=$(echo "${results}" | jq -r '.advisory_internal_url // ""')
-        echo -n "$INTERNAL_URL" | tee "$(results.advisory_internal_url.path)"
-        jq -n --arg url "$URL" --arg internal_url "$INTERNAL_URL" \
-          '{"advisory": {"url": $url, "internal_url": $internal_url}}' | tee "$RESULTS_FILE"
-    - name: create-trusted-artifact
-      ref:
-        resolver: "git"
-        params:
-          - name: url
-            value: "$(params.taskGitUrl)"
-          - name: revision
-            value: "$(params.taskGitRevision)"
-          - name: pathInRepo
-            value: stepactions/create-trusted-artifact/create-trusted-artifact.yaml
-      params:
-        - name: ociStorage
-          value: $(params.ociStorage)
-        - name: workDir
-          value: $(params.dataDir)
-        - name: sourceDataArtifact
-          value: $(results.sourceDataArtifact.path)
-    - name: patch-source-data-artifact-result
-      ref:
-        resolver: "git"
-        params:
-          - name: url
-            value: $(params.taskGitUrl)
-          - name: revision
-            value: $(params.taskGitRevision)
-          - name: pathInRepo
-            value: stepactions/patch-source-data-artifact-result/patch-source-data-artifact-result.yaml
-      params:
-        - name: ociStorage
-          value: $(params.ociStorage)
-        - name: sourceDataArtifact
-          value: $(results.sourceDataArtifact.path)
+        jq -n --arg url "$URL" '{"advisory": {"url": $url}}' | tee "$RESULTS_FILE"

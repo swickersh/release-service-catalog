@@ -4,7 +4,7 @@ kind: Pipeline
 metadata:
   name: push-artifacts-to-cdn
   labels:
-    app.kubernetes.io/version: "0.2.1"
+    app.kubernetes.io/version: "0.1.0"
   annotations:
     tekton.dev/pipelines.minVersion: "0.12.1"
     tekton.dev/tags: release
@@ -61,6 +61,10 @@ spec:
       default: "true"
   workspaces:
     - name: release-workspace
+  results:
+    - name: advisory_url
+      type: string
+      value: $(tasks.create-advisory.results.advisory_url)
   tasks:
     - name: verify-access-to-resources
       taskRef:
@@ -108,15 +112,34 @@ spec:
           value: $(params.snapshot)
         - name: subdirectory
           value: $(context.pipelineRun.uid)
-        - name: taskGitUrl
-          value: "$(params.taskGitUrl)"
-        - name: taskGitRevision
-          value: "$(params.taskGitRevision)"
       workspaces:
         - name: data
           workspace: release-workspace
       runAfter:
         - verify-access-to-resources
+    - name: check-data-keys
+      params:
+        - name: dataPath
+          value: "$(tasks.collect-data.results.data)"
+        - name: schema
+          value:  $(params.taskGitUrl)/raw/$(params.taskGitRevision)/schema/dataKeys.json
+        - name: systems
+          value:
+            - cdn
+      taskRef:
+        params:
+          - name: url
+            value: $(params.taskGitUrl)
+          - name: revision
+            value: $(params.taskGitRevision)
+          - name: pathInRepo
+            value: tasks/managed/check-data-keys/check-data-keys.yaml
+        resolver: git
+      workspaces:
+        - name: data
+          workspace: release-workspace
+      runAfter:
+        - populate-release-notes
     - name: reduce-snapshot
       taskRef:
         resolver: "git"
@@ -138,10 +161,6 @@ spec:
           value: $(tasks.collect-data.results.snapshotNamespace)
         - name: SNAPSHOT_PATH
           value: $(workspaces.data.path)/$(tasks.collect-data.results.snapshotSpec)
-        - name: taskGitUrl
-          value: "$(params.taskGitUrl)"
-        - name: taskGitRevision
-          value: "$(params.taskGitRevision)"
       workspaces:
         - name: data
           workspace: release-workspace
@@ -164,12 +183,8 @@ spec:
           value: "$(tasks.collect-data.results.data)"
         - name: snapshotPath
           value: "$(tasks.collect-data.results.snapshotSpec)"
-        - name: taskGitUrl
-          value: "$(params.taskGitUrl)"
-        - name: taskGitRevision
-          value: "$(params.taskGitRevision)"
       workspaces:
-        - name: data
+        - name: config
           workspace: release-workspace
       runAfter:
         - reduce-snapshot
@@ -203,19 +218,13 @@ spec:
           workspace: release-workspace
       runAfter:
         - check-data-keys
-    - name: check-data-keys
+    - name: populate-release-notes
+      timeout: "4h"  # temp workaround until github.com/konflux-ci/release-service/issues/603 is fixed
       params:
         - name: dataPath
           value: "$(tasks.collect-data.results.data)"
-        - name: schema
-          value:  $(params.taskGitUrl)/raw/$(params.taskGitRevision)/schema/dataKeys.json
-        - name: systems
-          value:
-            - cdn
-        - name: taskGitUrl
-          value: "$(params.taskGitUrl)"
-        - name: taskGitRevision
-          value: "$(params.taskGitRevision)"
+        - name: snapshotPath
+          value: "$(tasks.collect-data.results.snapshotSpec)"
       taskRef:
         params:
           - name: url
@@ -223,13 +232,64 @@ spec:
           - name: revision
             value: $(params.taskGitRevision)
           - name: pathInRepo
-            value: tasks/managed/check-data-keys/check-data-keys.yaml
+            value: tasks/managed/populate-release-notes/populate-release-notes.yaml
+        resolver: git
+      runAfter:
+        - apply-mapping
+      workspaces:
+        - name: data
+          workspace: release-workspace
+    - name: embargo-check
+      timeout: "4h"  # temp workaround until github.com/konflux-ci/release-service/issues/603 is fixed
+      params:
+        - name: dataPath
+          value: "$(tasks.collect-data.results.data)"
+        - name: pipelineRunUid
+          value: $(context.pipelineRun.uid)
+        - name: taskGitUrl
+          value: $(params.taskGitUrl)
+        - name: taskGitRevision
+          value: $(params.taskGitRevision)
+      taskRef:
+        params:
+          - name: url
+            value: $(params.taskGitUrl)
+          - name: revision
+            value: $(params.taskGitRevision)
+          - name: pathInRepo
+            value: tasks/managed/embargo-check/embargo-check.yaml
         resolver: git
       workspaces:
         - name: data
           workspace: release-workspace
       runAfter:
-        - apply-mapping
+        - check-data-keys
+        - populate-release-notes
+    - name: set-advisory-severity
+      timeout: "4h"  # temp workaround until github.com/konflux-ci/release-service/issues/603 is fixed
+      params:
+        - name: dataPath
+          value: "$(tasks.collect-data.results.data)"
+        - name: pipelineRunUid
+          value: $(context.pipelineRun.uid)
+        - name: taskGitUrl
+          value: $(params.taskGitUrl)
+        - name: taskGitRevision
+          value: $(params.taskGitRevision)
+      taskRef:
+        params:
+          - name: url
+            value: $(params.taskGitUrl)
+          - name: revision
+            value: $(params.taskGitRevision)
+          - name: pathInRepo
+            value: tasks/managed/set-advisory-severity/set-advisory-severity.yaml
+        resolver: git
+      workspaces:
+        - name: data
+          workspace: release-workspace
+      runAfter:
+        - populate-release-notes
     - name: push-artifacts-to-cdn
       timeout: "2h00m0s"
       when:
@@ -246,8 +306,6 @@ spec:
           - name: pathInRepo
             value: tasks/managed/push-artifacts-to-cdn/push-artifacts-to-cdn.yaml
       params:
-        - name: releasePath
-          value: "$(tasks.collect-data.results.release)"
         - name: dataPath
           value: "$(tasks.collect-data.results.data)"
         - name: snapshotPath
@@ -259,24 +317,78 @@ spec:
         - name: resultsDirPath
           value: "$(tasks.collect-data.results.resultsDir)"
         - name: taskGitUrl
-          value: "$(params.taskGitUrl)"
+          value: $(params.taskGitUrl)
         - name: taskGitRevision
-          value: "$(params.taskGitRevision)"
+          value: $(params.taskGitRevision)
+        - name: contentType
+          value: "binary"
       workspaces:
         - name: data
           workspace: release-workspace
       runAfter:
         - verify-enterprise-contract
+    - name: create-advisory
+      timeout: "4h"  # temp workaround until github.com/konflux-ci/release-service/issues/603 is fixed
+      retries: 5
+      params:
+        - name: releasePlanAdmissionPath
+          value: "$(tasks.collect-data.results.releasePlanAdmission)"
+        - name: snapshotPath
+          value: "$(tasks.collect-data.results.snapshotSpec)"
+        - name: dataPath
+          value: "$(tasks.collect-data.results.data)"
+        - name: resultsDirPath
+          value: "$(tasks.collect-data.results.resultsDir)"
+        - name: pipelineRunUid
+          value: $(context.pipelineRun.uid)
+        - name: taskGitUrl
+          value: $(params.taskGitUrl)
+        - name: taskGitRevision
+          value: $(params.taskGitRevision)
+      taskRef:
+        params:
+          - name: url
+            value: $(params.taskGitUrl)
+          - name: revision
+            value: $(params.taskGitRevision)
+          - name: pathInRepo
+            value: tasks/managed/create-advisory/create-advisory.yaml
+        resolver: git
+      workspaces:
+        - name: data
+          workspace: release-workspace
+      runAfter:
+        - check-data-keys
+        - embargo-check
+        - push-artifacts-to-cdn
+        - set-advisory-severity
+    - name: close-advisory-issues
+      timeout: "4h"  # temp workaround until github.com/konflux-ci/release-service/issues/603 is fixed
+      params:
+        - name: dataPath
+          value: "$(tasks.collect-data.results.data)"
+        - name: advisoryUrl
+          value: "$(tasks.create-advisory.results.advisory_url)"
+      taskRef:
+        params:
+          - name: url
+            value: $(params.taskGitUrl)
+          - name: revision
+            value: $(params.taskGitRevision)
+          - name: pathInRepo
+            value: tasks/managed/close-advisory-issues/close-advisory-issues.yaml
+        resolver: git
+      workspaces:
+        - name: data
+          workspace: release-workspace
+      runAfter:
+        - create-advisory
     - name: update-cr-status
       params:
         - name: resource
           value: $(params.release)
         - name: resultsDirPath
           value: $(tasks.collect-data.results.resultsDir)
-        - name: taskGitUrl
-          value: "$(params.taskGitUrl)"
-        - name: taskGitRevision
-          value: "$(params.taskGitRevision)"
       taskRef:
         resolver: "git"
         params:
@@ -290,7 +402,7 @@ spec:
         - name: data
           workspace: release-workspace
       runAfter:
-        - push-artifacts-to-cdn
+        - create-advisory
   finally:
     - name: cleanup
       taskRef:
