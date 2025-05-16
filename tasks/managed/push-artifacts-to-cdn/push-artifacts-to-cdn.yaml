@@ -138,7 +138,6 @@ spec:
           -l ${TASK_LABEL}="${TASK_ID}" \
           -l ${PIPELINERUN_LABEL}="$(params.pipelineRunUid)" \
           -t "$(params.requestTimeout)" \
-          --service-account "${service_account_name}" \
           --pipeline-timeout 24h0m0s \
           --task-timeout 23h50m0s \
           --finally-timeout 0h10m0s \
@@ -173,7 +172,7 @@ spec:
           results=$(jq -c '.results' <<< "${overallStatus}")
           # despite the assumption of never having a failed pipeline,
           # let's try to at least still a log message about the abnormal
-          # failure 
+          # failure
           if [ "${status}" == "True" ]; then
             resultValue=$(jq -r '.[]  | select(.name == "result").value' <<< "${results}")
             if [ "${resultValue}" == "Success" ]; then

@@ -344,8 +344,6 @@ spec:
           value: $(params.taskGitUrl)
         - name: taskGitRevision
           value: $(params.taskGitRevision)
-        - name: contentType
-          value: "binary"
       workspaces:
         - name: data
           workspace: release-workspace
