@@ -271,14 +271,14 @@ spec:
 
             # Get the number of files for this component
             FILES_LENGTH=$(jq --arg name "$name" \
-              '[.spec.data.mapping.components[]
+              '[.mapping.components[]
                 | select(.name == $name)
                 | .files
                 | length][0]' "$DATA_FILE")
 
             for ((k = 0; k < FILES_LENGTH; k++)); do
                 file=$(jq -c --arg name "$name" --argjson k "$k" \
-                    '.spec.data.mapping.components[]
+                    '.mapping.components[]
                       | select(.name == $name)
                       | .files[$k]' "$DATA_FILE")
                 arch=$(jq -r '.arch' <<< "$file")
