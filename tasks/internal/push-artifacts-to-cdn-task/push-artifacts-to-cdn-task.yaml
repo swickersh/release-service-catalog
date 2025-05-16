@@ -1071,3 +1071,25 @@ spec:
         #     COMPONENT=$(jq -c --arg i "$i" '.components[$i|tonumber]' <<< "$SNAPSHOT_JSON")
         #     process_component_for_developer_portal "$COMPONENT" "$CGW_DIR" 2> "$STDERR_FILE"
         # done
+
+
+advisoryData='
+{"cves":
+[{"component":"releng-test-product-binaries",
+"key":"CVE-2024-7592"}],
+type":"RHSA",
+"description":"test description.",
+"solution":"",
+"synopsis":"test synopsis",
+"topic":"test topic",
+"product_id":[1],
+"product_name":"Releng Test Product",
+"product_version":"1.5",
+"content":
+{"artifacts":
+[{"architecture":"amd64","os":"windows","purl":"placeholder","component":"releng-test-product-binaries","cves":{"fixed":{"CVE-2024-7592":{"packages":[]}}}},
+{"architecture":"amd64","os":"linux","purl":"placeholder","component":"releng-test-product-binaries","cves":{"fixed":{"CVE-2024-7592":{"packages":[]}}}},
+{"architecture":"amd64","os":"darwin","purl":"placeholder","component":"releng-test-product-binaries","cves":{"fixed":{"CVE-2024-7592":{"packages":[]}}}},
+{"architecture":"arm64","os":"linux","purl":"placeholder","component":"releng-test-product-binaries","cves":{"fixed":{"CVE-2024-7592":{"packages":[]}}}},
+{"architecture":"arm64","os":"darwin","purl":"placeholder","component":"releng-test-product-binaries","cves":{"fixed":{"CVE-2024-7592":{"packages":[]}}}}]}
+,"references":["https://access.redhat.com/security/cve/CVE-2024-7592","https://access.redhat.com/security/updates/classification/"]}'
