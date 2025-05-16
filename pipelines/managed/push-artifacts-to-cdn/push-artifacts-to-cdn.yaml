@@ -200,7 +200,7 @@ spec:
         - name: taskGitRevision
           value: "$(params.taskGitRevision)"
       workspaces:
-        - name: config
+        - name: data
           workspace: release-workspace
       runAfter:
         - reduce-snapshot
