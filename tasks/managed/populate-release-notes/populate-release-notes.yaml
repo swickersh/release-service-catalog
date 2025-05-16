@@ -109,9 +109,6 @@ spec:
           value: $(params.sourceDataArtifact)
     - name: populate-release-notes-images
       image: quay.io/konflux-ci/release-service-utils:e85ceb962ee6f4d0672b4aa4e9946621ab302f20
-      params:
-        - name: contentType
-          value: $(params.contentType)
       script: |
         #!/usr/bin/env bash
         set -ex
@@ -231,9 +228,6 @@ spec:
             done
         done
     - name: populate-release-notes-binaries
-      params:
-        - name: contentType
-          value: $(params.contentType)
       image: quay.io/konflux-ci/release-service-utils:e85ceb962ee6f4d0672b4aa4e9946621ab302f20
       script: |
         #!/usr/bin/env bash
