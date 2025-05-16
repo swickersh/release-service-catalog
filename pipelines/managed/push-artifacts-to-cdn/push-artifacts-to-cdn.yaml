@@ -245,6 +245,8 @@ spec:
           value: "$(params.taskGitUrl)"
         - name: taskGitRevision
           value: "$(params.taskGitRevision)"
+        - name: contentType
+          value: "binaries"
       taskRef:
         params:
           - name: url
