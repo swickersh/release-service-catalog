@@ -32,6 +32,10 @@ spec:
       type: string
       description: Type of request to be created
       default: "create-advisory"
+    - name: contentType
+      type: string
+      description: The contentType of the release artifact. One of [image|generic]
+      default: "image"
     - name: synchronously
       type: string
       description: Whether the task should wait for InternalRequests to complete
@@ -69,8 +73,7 @@ spec:
 
         # Extract the advisory key and signing configMap name from the data JSON file
         advisoryData=$(jq -c "$(params.jsonKey)" "$(workspaces.data.path)/$(params.dataPath)")
-        #configMapName=$(jq -er '.sign.configMapName' "$(workspaces.data.path)/$(params.dataPath)")
-        configMapName='fakeConfigMapName'
+        configMapName=$(jq -er '.sign.configMapName' "$(workspaces.data.path)/$(params.dataPath)")
         # Validate type
         advisoryType=$(jq -r '.type' <<< "$advisoryData")
         if [ "$advisoryType" == "null" ]; then
@@ -81,13 +84,24 @@ spec:
           advisoryType="$DEFAULT_ADVISORY_TYPE"
         fi
 
+        if [ "$(params.contentType)" == "generic" ]; then
+          content_path=".content.artifacts"
+        else
+          content_path=".content.images"
+        fi
+
         if ! [[ "$advisoryType" =~ ^(RHSA|RHBA|RHEA)$ ]]; then
             echo "Error: advisory type must be one of RHSA, RHBA or RHEA"
             exit 1
         fi
 
         # Ensure RHSA is only used if CVEs are provided
-        NUM_CVES=$(jq '[.content.images[]?.cves.fixed // [] | length] | add' <<< "$advisoryData")
+        NUM_CVES=$(jq --arg path "$content_path" '
+          getpath($path | split(".") | .[1:])
+          | map(.cves.fixed // [] | length)
+          | add
+        ' <<< "$advisoryData")
+
         if [[ "$advisoryType" == "RHSA" ]] && [[ "$NUM_CVES" -eq 0 ]] ; then
             echo "Provided advisory type is RHSA, but no fixed CVEs were listed"
             echo "RHSA should only be used if CVEs are fixed in the advisory. Failing..."
@@ -168,6 +182,7 @@ spec:
                          -p origin="${origin}" \
                          -p advisory_json="${advisoryData}" \
                          -p config_map_name="${configMapName}" \
+                         -p contentType="${params.contentType}" \
                          -p advisory_secret_name="${advisorySecretName}" \
                          -p errata_secret_name="${errataSecretName}" \
                          -p taskGitUrl="$(params.taskGitUrl)" \
