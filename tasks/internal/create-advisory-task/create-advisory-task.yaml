@@ -40,6 +40,10 @@ spec:
     - name: internalRequestPipelineRunName
       type: string
       description: Name of the PipelineRun that called this task
+    - name: contentType
+      type: string
+      description: The contentType of the release artifact. One of [image|generic]
+      default: "image"
   results:
     - name: result
       description: Success if the task succeeds, the error otherwise
@@ -142,10 +146,12 @@ spec:
           # This also cds into the git repo
           git_clone_and_checkout --repository "$GIT_REPO" --revision "$REPO_BRANCH"
 
-          # we could check a param here for contentType
-          # set this variable to be named just CONTENT and don't specify images/artifacts here
-          CONTENT_IMAGES=$(jq -c '.content.images // []' <<< "$ADVISORY_JSON" )
-          # if contentType is binaries make a new variable called spec_content_type="spec.content.artifacts"
+          spec_content_type=".content.images"
+          if [ "$(params.contentType)" == "generic" ]; then
+            echo "Content type is generic artifact."
+            spec_content_type=".content.artifacts"
+          fi
+          CONTENT=$(jq -c "${spec_content_type} // []" <<< "$ADVISORY_JSON")
 
           # Use ISO 8601 format in UTC/Zulu time, e.g. 2024-03-06T17:27:38Z
           SHIP_DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
@@ -168,17 +174,13 @@ spec:
 
           for ADVISORY_SUBDIR in $EXISTING_ADVISORIES; do
               ADVISORY_FILE="${ADVISORY_BASE_DIR}/${ADVISORY_SUBDIR}/advisory.yaml"
-              # use spec_content_type here
-              EXISTING_CONTENT=$(yq -o=json '.spec.content.images // []' "${ADVISORY_FILE}")
+              EXISTING_CONTENT=$(yq -o=json ".spec${spec_content_type} // []" "${ADVISORY_FILE}")
 
               echo "Processing advisory: ${ADVISORY_FILE}"
-              # use contentType here
-              echo "Existing images in advisory: $EXISTING_CONTENT"
+              echo "Existing content in advisory: $EXISTING_CONTENT"
 
-              # do same as above about just naming this CONTENT
-              # Update CONTENT_IMAGES by removing images that already exist in the advisory
-              # this actually references repository and containerImage so we probably need a binary specific conditional here
-              CONTENT_IMAGES=$(echo "$CONTENT_IMAGES" | jq --argjson existing "$EXISTING_CONTENT" '
+              # Update CONTENT by removing images or generic artifacts that already exist in the advisory
+              CONTENT=$(echo "$CONTENT" | jq --argjson existing "$EXISTING_CONTENT" '
                 map(select(
                   .containerImage as $ci |
                   .tags as $tags |

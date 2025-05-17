@@ -367,6 +367,8 @@ spec:
           value: $(params.taskGitUrl)
         - name: taskGitRevision
           value: $(params.taskGitRevision)
+        - name: contentType
+          value: "generic"
       taskRef:
         params:
           - name: url
