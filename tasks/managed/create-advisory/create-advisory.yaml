@@ -182,7 +182,7 @@ spec:
                          -p origin="${origin}" \
                          -p advisory_json="${advisoryData}" \
                          -p config_map_name="${configMapName}" \
-                         -p contentType="${params.contentType}" \
+                         -p contentType="$(params.contentType)" \
                          -p advisory_secret_name="${advisorySecretName}" \
                          -p errata_secret_name="${errataSecretName}" \
                          -p taskGitUrl="$(params.taskGitUrl)" \
