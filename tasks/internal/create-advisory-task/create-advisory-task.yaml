@@ -156,7 +156,8 @@ spec:
             echo "Content type is generic artifact."
             spec_content_type=".content.artifacts"
           fi
-          CONTENT=$(jq -c "${spec_content_type} // []" <<< "$ADVISORY_JSON")
+          CONTENT_FILE=/tmp/content.json
+          jq -c "${spec_content_type} // []" <<< "$ADVISORY_JSON" > "$CONTENT_FILE"
 
           # Use ISO 8601 format in UTC/Zulu time, e.g. 2024-03-06T17:27:38Z
           SHIP_DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
@@ -197,7 +198,7 @@ spec:
                   map(select(
                     .purl as $p |
                     ($existing | map(select(.purl == $p)) | length == 0)
-                  ))' "$CONTENT" > /tmp/content_filtered.json
+                  ))' "$CONTENT_FILE" > /tmp/content_filtered.json
               else
                 jq --argfile existing "$EXISTING_CONTENT" '
                   map(select(
@@ -207,17 +208,17 @@ spec:
                     ($existing | map(select(
                       .containerImage == $ci and .tags == $tags and .repository == $repo
                     )) | length == 0)
-                  ))' "$CONTENT" > /tmp/content_filtered.json
+                  ))' "$CONTENT_FILE" > /tmp/content_filtered.json
               fi
 
-              mv /tmp/content_filtered.json "$CONTENT"
+              mv /tmp/content_filtered.json "$CONTENT_FILE"
 
 
               echo "Remaining entries after filtering:"
-              cat "$CONTENT"
+              cat "$CONTENT_FILE"
 
               # If after filtering, no entries are left, then we can exit early
-              if jq -e 'length == 0' "$CONTENT" >/dev/null; then
+              if jq -e 'length == 0' "$CONTENT_FILE" >/dev/null; then
                   echo "Matching advisory exists: ${ADVISORY_FILE}. Skipping creation."
                   ADVISORY_INTERNAL_URL="${GIT_REPO//\.git/}/-/raw/main/${ADVISORY_FILE}"
                   ADVISORY_TYPE=$(yq -r '.spec.type' "${ADVISORY_FILE}")
@@ -229,14 +230,19 @@ spec:
               fi
           done
 
-          NEW_ADVISORY_JSON=$(jq --argfile new_content "$CONTENT" \
+          NEW_ADVISORY_JSON=$(jq --argfile new_content "$CONTENT_FILE" \
                        --arg path "$spec_content_type" \
           'setpath(($path | split(".") | .[1:]); $new_content)' <<< "$ADVISORY_JSON")
 
 
           signingKey=$(kubectl get configmap "$(params.config_map_name)" -o jsonpath="{.data.SIG_KEY_NAME}")
-          advisoryJsonWithKey=$(jq -c --arg key "$signingKey" \
-            '.content.images[] += {"signingKey": $key}' <<< "$NEW_ADVISORY_JSON")
+          if [ "$(params.contentType)" == "images" ]; then
+            advisoryJsonWithKey=$(jq -c --arg key "$signingKey" \
+              '.content.images[] += {"signingKey": $key}' <<< "$NEW_ADVISORY_JSON")
+          else
+            advisoryJsonWithKey=$(jq -c --arg key "$signingKey" \
+              '.content.artifacts[] += {"signingKey": $key}' <<< "$NEW_ADVISORY_JSON")
+          fi
 
           LIVE_ID=$(jq -r '.live_id' <<< "$ADVISORY_JSON" )
           if [[ "$LIVE_ID" == null ]]; then
