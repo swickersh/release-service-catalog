@@ -277,6 +277,35 @@ spec:
           ADVISORY_FILEPATH="${ADVISORY_DIR}/advisory.yaml"
           ADVISORY_NAME="${YEAR}:${ADVISORY_NUM}"
 
+          ##############################################
+          #############
+          # Ensure required fields are present before wrapping
+          # advisoryJsonWithKey=$(jq -c '
+          #   .product_stream = (.product_stream // "v1.2") |
+          #   .cpe = (.cpe // "cpe:/a:redhat:releng_test_product:1.2") |
+          #   .issues.fixed = (.issues.fixed // []) |
+          #   .references = (.references // [])
+          # ' <<< "$advisoryJsonWithKey")
+
+          # # Wrap input under .advisory.spec
+          # DATA=$(jq -c '{"advisory":{"spec":.}}' <<< "$advisoryJsonWithKey")
+
+          # # Add top-level fields alongside .advisory
+          # DATA=$(jq -c \
+          #   --arg advisory_name "$ADVISORY_NAME" \
+          #   --arg advisory_ship_date "$SHIP_DATE" \
+          #   '$ARGS.named + .' <<< "$DATA")
+          #############
+          advisoryJsonWithKey=$(jq -c '
+            .product_stream = (.product_stream // "v1.2") |
+            .cpe = (.cpe // "cpe:/a:redhat:releng_test_product:1.2")
+          ' <<< "$advisoryJsonWithKey")
+
+          # Wrap input under .advisory.spec
+          DATA=$(jq -c '{"advisory":{"spec":.}}' <<< "$advisoryJsonWithKey")
+
+            #################################################
+
           # Prepare variables for the advisory template
           DATA=$(jq -c '{"advisory":{"spec":.}}' <<< "$advisoryJsonWithKey")
           DATA=$(jq -c --arg advisory_name "$ADVISORY_NAME" --arg advisory_ship_date "$SHIP_DATE" \
