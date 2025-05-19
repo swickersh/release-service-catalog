@@ -4,7 +4,7 @@ kind: Task
 metadata:
   name: create-advisory
   labels:
-    app.kubernetes.io/version: "6.1.2"
+    app.kubernetes.io/version: "7.0.0"
   annotations:
     tekton.dev/pipelines.minVersion: "0.12.1"
     tekton.dev/tags: release
@@ -32,6 +32,10 @@ spec:
       type: string
       description: Type of request to be created
       default: "create-advisory"
+    - name: contentType
+      type: string
+      description: The contentType of the release artifact. One of [image|generic]
+      default: "image"
     - name: synchronously
       type: string
       description: Whether the task should wait for InternalRequests to complete
@@ -39,7 +43,7 @@ spec:
     - name: pipelineRunUid
       type: string
       description: The uid of the current pipelineRun. Used as a label value when creating internal requests
-    - name: ociStorage
+        - name: ociStorage
       description: The OCI repository where the Trusted Artifacts are stored.
       type: string
       default: "empty"
@@ -144,7 +148,6 @@ spec:
         # Extract the advisory key and signing configMap name from the data JSON file
         advisoryData=$(jq -c "$(params.jsonKey)" "$(params.dataDir)/$(params.dataPath)")
         configMapName=$(jq -er '.sign.configMapName' "$(params.dataDir)/$(params.dataPath)")
-
         # Check custom advisory live id
         advisoryLiveId=$(jq -r '.live_id' <<< "$advisoryData")
         advisoryAllowCustomLiveId=$(jq -r '.allow_custom_live_id // false' <<< "$advisoryData")
@@ -152,7 +155,8 @@ spec:
           echo "Error: advisory live id is only allowed if allow_custom_live_id is set to true"
           exit 1
         fi
-
+        advisoryData=$(jq -c "$(params.jsonKey)" "$(workspaces.data.path)/$(params.dataPath)")
+        configMapName=$(jq -er '.sign.configMapName' "$(workspaces.data.path)/$(params.dataPath)")
         # Validate type
         advisoryType=$(jq -r '.type' <<< "$advisoryData")
         if [ "$advisoryType" == "null" ]; then
@@ -163,13 +167,24 @@ spec:
           advisoryType="$DEFAULT_ADVISORY_TYPE"
         fi
 
+        if [ "$(params.contentType)" == "binary" ] || [ "$(params.contentType)" == "generic" ]; then
+          content_path=".content.artifacts"
+        else
+          content_path=".content.images"
+        fi
+
         if ! [[ "$advisoryType" =~ ^(RHSA|RHBA|RHEA)$ ]]; then
             echo "Error: advisory type must be one of RHSA, RHBA or RHEA"
             exit 1
         fi
 
         # Ensure RHSA is only used if CVEs are provided
-        NUM_CVES=$(jq '[.content.images[]?.cves.fixed // [] | length] | add' <<< "$advisoryData")
+        NUM_CVES=$(jq --arg path "$content_path" '
+          getpath($path | split(".") | .[1:])
+          | map(.cves.fixed // [] | length)
+          | add
+        ' <<< "$advisoryData")
+
         if [[ "$advisoryType" == "RHSA" ]] && [[ "$NUM_CVES" -eq 0 ]] ; then
             echo "Provided advisory type is RHSA, but no fixed CVEs were listed"
             echo "RHSA should only be used if CVEs are fixed in the advisory. Failing..."
@@ -181,55 +196,55 @@ spec:
         # only 2 gitlab instances are permitted...prod and staging
         # these are their secret names
         #
-        prodSecretName="create-advisory-prod-secret"
-        prodErrataSecretName="errata-prod-service-account"
-        stagingSecretName="create-advisory-stage-secret"
+        prodSecretName="create-advisory-poc-secret"
+        prodErrataSecretName="errata-stage-service-account"
+        stagingSecretName="create-advisory-poc-secret"
         stagingErrataSecretName="errata-stage-service-account"
         #
         # detect which one to use based on repositories specified
         #
-        pending_repositories=$(jq -r '.components[] | select(.repository |
-          contains("quay.io/redhat-pending/")) |
-          .repository' "$(params.dataDir)/$(params.snapshotPath)")
-        prod_repositories=$(jq -r '.components[] | select(.repository | contains("quay.io/redhat-prod/")) |
-          .repository' "$(params.dataDir)/$(params.snapshotPath)")
-        orphan_repositories=$(jq -r '.components[] | select(.repository | contains("quay.io/redhat-prod/") |
-          not) | select(.repository | contains("quay.io/redhat-pending/") | not) |
-          .repository' "$(params.dataDir)/$(params.snapshotPath)")
+        # pending_repositories=$(jq -r '.components[] | select(.repository |
+        #   contains("quay.io/redhat-pending/")) |
+        #   .repository' "$(workspaces.data.path)/$(params.snapshotPath)")
+        # prod_repositories=$(jq -r '.components[] | select(.repository | contains("quay.io/redhat-prod/")) |
+        #   .repository' "$(workspaces.data.path)/$(params.snapshotPath)")
+        # orphan_repositories=$(jq -r '.components[] | select(.repository | contains("quay.io/redhat-prod/") |
+        #   not) | select(.repository | contains("quay.io/redhat-pending/") | not) |
+        #   .repository' "$(workspaces.data.path)/$(params.snapshotPath)")
 
-        foundPendingRepositories=false
-        if [ -n "${pending_repositories}" ]; then
-          foundPendingRepositories=true
-        fi
+        # foundPendingRepositories=false
+        # if [ -n "${pending_repositories}" ]; then
+        #   foundPendingRepositories=true
+        # fi
 
-        foundProdRepositories=false
-        if [ -n "${prod_repositories}" ]; then
-          foundProdRepositories=true
-        fi
+        # foundProdRepositories=false
+        # if [ -n "${prod_repositories}" ]; then
+        #   foundProdRepositories=true
+        # fi
 
-        foundOrphanRepositories=false
-        if [ -n "${orphan_repositories}" ]; then
-          foundOrphanRepositories=true
-        fi
+        # foundOrphanRepositories=false
+        # if [ -n "${orphan_repositories}" ]; then
+        #   foundOrphanRepositories=true
+        # fi
 
-        echo "foundPendingRepositories: ${foundPendingRepositories}"
-        echo "foundProdRepositories: ${foundProdRepositories}"
-        echo "foundOrphanRepositories: ${foundOrphanRepositories}"
+        # echo "foundPendingRepositories: ${foundPendingRepositories}"
+        # echo "foundProdRepositories: ${foundProdRepositories}"
+        # echo "foundOrphanRepositories: ${foundOrphanRepositories}"
 
-        if [ "${foundPendingRepositories}" == "true" ] && [ "${foundProdRepositories}" == "true" ]; then
-          echo "Error: cannot publish to both redhat-pending and redhat-prod repositories"
-          exit 1
-        fi
+        # if [ "${foundPendingRepositories}" == "true" ] && [ "${foundProdRepositories}" == "true" ]; then
+        #   echo "Error: cannot publish to both redhat-pending and redhat-prod repositories"
+        #   exit 1
+        # fi
 
-        if [ "${foundPendingRepositories}" == "false" ] && [ "${foundProdRepositories}" == "false" ]; then
-          echo "Error: you must publish to either redhat-pending or redhat-prod repositories"
-          exit 1
-        fi
+        # if [ "${foundPendingRepositories}" == "false" ] && [ "${foundProdRepositories}" == "false" ]; then
+        #   echo "Error: you must publish to either redhat-pending or redhat-prod repositories"
+        #   exit 1
+        # fi
 
-        if [ "${foundOrphanRepositories}" == "true" ]; then
-          echo "Error: you must publish to either redhat-pending or redhat-prod repositories"
-          exit 1
-        fi
+        # if [ "${foundOrphanRepositories}" == "true" ]; then
+        #   echo "Error: you must publish to either redhat-pending or redhat-prod repositories"
+        #   exit 1
+        # fi
 
         # at this point, one of foundPendingRepositories or foundProdRepositories
         # is true.
@@ -250,6 +265,7 @@ spec:
                          -p origin="${origin}" \
                          -p advisory_json="${advisoryData}" \
                          -p config_map_name="${configMapName}" \
+                         -p contentType="$(params.contentType)" \
                          -p advisory_secret_name="${advisorySecretName}" \
                          -p errata_secret_name="${errataSecretName}" \
                          -p taskGitUrl="$(params.taskGitUrl)" \
@@ -257,6 +273,8 @@ spec:
                          -s "$(params.synchronously)" \
                          -l ${pipelinerun_label}="$(params.pipelineRunUid)" \
                          | tee "$IR_FILE" || exit 1
+                         > "$IR_FILE" || \
+                         (grep "^\[" "$IR_FILE" | jq . && exit 1)
 
         internalRequest=$(awk -F"'" '/created/ { print $2 }' "$IR_FILE")
         echo "done (${internalRequest})"
