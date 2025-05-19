@@ -84,7 +84,7 @@ spec:
           advisoryType="$DEFAULT_ADVISORY_TYPE"
         fi
 
-        if [ "$(params.contentType)" == "generic" ]; then
+        if [ "$(params.contentType)" == "binary" ] || [ "$(params.contentType)" == "generic" ]; then
           content_path=".content.artifacts"
         else
           content_path=".content.images"

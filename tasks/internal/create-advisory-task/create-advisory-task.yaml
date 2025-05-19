@@ -152,7 +152,7 @@ spec:
           git_clone_and_checkout --repository "$GIT_REPO" --revision "$REPO_BRANCH"
 
           spec_content_type=".content.images"
-          if [ "$(params.contentType)" == "generic" ]; then
+          if [ "$(params.contentType)" == "binary" ] || [ "$(params.contentType)" == "generic" ]; then
             echo "Content type is generic artifact."
             spec_content_type=".content.artifacts"
           fi
@@ -191,7 +191,7 @@ spec:
               cat "$EXISTING_CONTENT"
 
               # Update CONTENT by removing entries that already exist in the advisory
-              if [ "$contentType" == "generic" ]; then
+              if [ "$(params.contentType)" == "generic" ]; then
                 # Use purl as unique key for generic artifacts
                 jq --argfile existing "$EXISTING_CONTENT" '
                   map(select(
