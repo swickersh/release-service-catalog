@@ -1,0 +1,120 @@
+{
+    "mapping": {
+      "components": [
+        {
+          "name": "helm",
+          "files": [
+            {
+              "name": "helm-windows-amd64.exe",
+              "arch": "amd64",
+              "os": "windows"
+            },
+            {
+              "name": "helm-linux-amd64.tar.gz",
+              "arch": "amd64",
+              "os": "linux"
+            },
+            {
+              "name": "helm-darwin-amd64.tar.gz",
+              "arch": "amd64",
+              "os": "darwin"
+            },
+            {
+              "name": "helm-linux-arm64.tar.gz",
+              "arch": "arm64",
+              "os": "linux"
+            },
+            {
+              "name": "helm-darwin-arm64.tar.gz",
+              "arch": "arm64",
+              "os": "darwin"
+            }
+          ],
+          "contentGateway": {
+            "productName": "helm",
+            "productCode": "helm",
+            "productVersionName": "3.15.4",
+            "filePrefix": "nada"
+          }
+        }
+      ]
+    },
+    "releaseNotes": [
+      {
+        "architecture": "amd64",
+        "os": "windows",
+        "purl": "placeholder",
+        "component": "helm",
+        "cves": {
+          "fixed": {
+            "CVE-2024-7592": {
+              "packages": []
+            }
+          }
+        }
+      },
+      {
+        "architecture": "amd64",
+        "os": "linux",
+        "purl": "placeholder",
+        "component": "helm",
+        "cves": {
+          "fixed": {
+            "CVE-2024-7592": {
+              "packages": []
+            }
+          }
+        }
+      },
+      {
+        "architecture": "amd64",
+        "os": "darwin",
+        "purl": "placeholder",
+        "component": "helm",
+        "cves": {
+          "fixed": {
+            "CVE-2024-7592": {
+              "packages": []
+            }
+          }
+        }
+      },
+      {
+        "architecture": "arm64",
+        "os": "linux",
+        "purl": "placeholder",
+        "component": "helm",
+        "cves": {
+          "fixed": {
+            "CVE-2024-7592": {
+              "packages": []
+            }
+          }
+        }
+      },
+      {
+        "architecture": "arm64",
+        "os": "darwin",
+        "purl": "placeholder",
+        "component": "helm",
+        "cves": {
+          "fixed": {
+            "CVE-2024-7592": {
+              "packages": []
+            }
+          }
+        }
+      }],
+    "cdn": {
+      "env": "production"
+    },
+    "pyxis": {
+      "secret": "pyxis-staging-secret",
+      "server": "stage"
+    },
+    "intention": "production",
+    "sign": {
+      "configMapName": "hacbs-signing-pipeline-config-redhatrelease2",
+      "cosignSecretName": "konflux-cosign-signing-production"
+    }
+  }

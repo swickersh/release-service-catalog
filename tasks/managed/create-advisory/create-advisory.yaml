@@ -43,7 +43,7 @@ spec:
     - name: pipelineRunUid
       type: string
       description: The uid of the current pipelineRun. Used as a label value when creating internal requests
-        - name: ociStorage
+    - name: ociStorage
       description: The OCI repository where the Trusted Artifacts are stored.
       type: string
       default: "empty"
@@ -130,6 +130,53 @@ spec:
           value: $(params.dataDir)
         - name: sourceDataArtifact
           value: $(params.sourceDataArtifact)
+    - name: update-release-notes
+      image: quay.io/konflux-ci/release-service-utils:0f82be4be43294b6a96846d87ef7f7c0b9e34267
+      script: |
+        #!/bin/bash
+        set -exo pipefail
+
+        # call the python3 utils/get_cgw_download_urls.py and save the output of download URLs
+        # the arguments to the scripts are product and version.
+        # you can get those from the data.json file under spec.data.mapping.component.contentGateway.productCode and contentGatway.productVersionName
+        # as a list
+        # they will be in this format:
+        # /content/origin/files/sha256/c6/c6ff9aa942d710e73c877d765b7682bc22fcdbc59e43d708511ba21d249696c7/helm-linux-amd64
+
+        # here's what you do:
+        # iterate through each entry in advisoryData
+        # for each entry, find the download URL that has the matching filename (like helm-linux-amd64) and
+        # take baseUrl + downloadUrl and set it as the PURL FIELD.
+        # end result should look like:
+        # purl= pkg:generic/helm-linux-amd64@"$version"?download_url=$baseUrl+$downloadURL
+        # the sample advisory data would look like:
+        {
+        #   "architecture": "amd64",
+        #   "os": "linux",
+        #   "purl": "placeholder",
+        #   "component": "releng-test-product-binaries",
+        #   "cves": {
+        #     "fixed": {
+        #       "CVE-2024-7592": {
+        #         "packages": []
+        #       }
+        #     }
+        #   }
+        # },
+        # {
+        #   "architecture": "amd64",
+        #   "os": "darwin",
+        #   "purl": "placeholder",
+        #   "component": "releng-test-product-binaries",
+        #   "cves": {
+        #     "fixed": {
+        #       "CVE-2024-7592": {
+        #         "packages": []
+        #       }
+        #     }
+        #   }
+        # },
+
     - name: run-script
       image: quay.io/konflux-ci/release-service-utils:0f82be4be43294b6a96846d87ef7f7c0b9e34267
       script: |
@@ -155,8 +202,6 @@ spec:
           echo "Error: advisory live id is only allowed if allow_custom_live_id is set to true"
           exit 1
         fi
-        advisoryData=$(jq -c "$(params.jsonKey)" "$(workspaces.data.path)/$(params.dataPath)")
-        configMapName=$(jq -er '.sign.configMapName' "$(workspaces.data.path)/$(params.dataPath)")
         # Validate type
         advisoryType=$(jq -r '.type' <<< "$advisoryData")
         if [ "$advisoryType" == "null" ]; then
