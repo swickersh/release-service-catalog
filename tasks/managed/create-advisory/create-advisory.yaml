@@ -167,11 +167,6 @@ spec:
         # This step is intended for generic artifacts only and is skipped for images.
         if [ "$(params.contentType)" != "image" ]; then
           DATA_FILE="$(params.dataDir)/$(params.dataPath)"
-          echo "DEBUG: Contents of $DATA_FILE before modification:"
-          cat "$DATA_FILE"
-          #ADVISORY_JSON_KEY=".releaseNotes.content.artifacts"
-          ADVISORY_JSON_KEY="$(params.jsonKey)"
-          artifacts_path=".releaseNotes.content.artifacts"
 
           COMPONENTS=$(jq -c '.mapping.components[] | select(.contentGateway)' "$DATA_FILE")
 
@@ -194,7 +189,8 @@ spec:
               done <<< "$URLS_JSON"
 
               # Get all advisory entries that match this component
-              MATCHING_ENTRIES=$(jq -c --arg name "$COMPONENT_NAME" "${artifacts_path}[] | select(.component == \$name)" "$DATA_FILE")
+              MATCHING_ENTRIES=$(jq -c --arg name "$COMPONENT_NAME" \
+                '.releaseNotes.content.artifacts[] | select(.component == $name)' "$DATA_FILE")
 
               while IFS= read -r entry; do
                   ARCH=$(jq -r '.architecture' <<< "$entry")
@@ -217,9 +213,11 @@ spec:
 
           done <<< "$COMPONENTS"
 
-          # Merge updated advisory entries back into releaseNotes in the DATA_FILE
+          # Merge updated advisory entries back into releaseNotes.content.artifacts in the DATA_FILE
           ENTRIES_JOINED=$(IFS=,; echo "${UPDATED_ENTRIES[*]}")
-          jq --argjson updated "[$ENTRIES_JOINED]" "$ADVISORY_JSON_KEY = \$updated" > /tmp/data.tmp && mv /tmp/data.tmp "$DATA_FILE"
+          jq --argjson updated "[$ENTRIES_JOINED]" '
+            .releaseNotes.content.artifacts = $updated
+          ' "$DATA_FILE" > /tmp/data.tmp && mv /tmp/data.tmp "$DATA_FILE"
         fi
     - name: run-script
       image: quay.io/konflux-ci/release-service-utils:0f82be4be43294b6a96846d87ef7f7c0b9e34267
