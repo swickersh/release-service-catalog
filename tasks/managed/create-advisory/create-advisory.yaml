@@ -167,11 +167,9 @@ spec:
         # This step is intended for generic artifacts only and is skipped for images.
         if [ "$(params.contentType)" != "image" ]; then
           DATA_FILE="$(params.dataDir)/$(params.dataPath)"
-
           echo "DEBUG: Contents of $DATA_FILE before modification:"
           cat "$DATA_FILE"
-
-          ADVISORY_JSON_KEY=".releaseNotes.content.artifacts"
+          ADVISORY_JSON_KEY="$(params.jsonKey)"
 
           COMPONENTS=$(jq -c '.mapping.components[] | select(.contentGateway)' "$DATA_FILE")
 
