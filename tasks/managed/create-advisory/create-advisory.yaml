@@ -167,7 +167,7 @@ spec:
         # This step is intended for generic artifacts only and is skipped for images.
         if [ "$(params.contentType)" != "image" ]; then
           DATA_FILE="$(params.dataDir)/$(params.dataPath)"
-          ADVISORY_JSON_KEY="$(params.jsonKey)"
+          ADVISORY_JSON_KEY=".releaseNotes.content.artifacts"
 
           COMPONENTS=$(jq -c '.mapping.components[] | select(.contentGateway)' "$DATA_FILE")
 
