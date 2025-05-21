@@ -297,7 +297,7 @@ spec:
                     jsonString=$(jq --argjson cves "$CVEsJson" '. += $cves' <<< "$jsonString")
                 fi
 
-                jq --argjson image "$jsonString" '.releaseNotes.content.artifacts += [$image]' "${DATA_FILE}" > \
+                jq --argjson artifact "$jsonString" '.releaseNotes.content.artifacts += [$artifact]' "${DATA_FILE}" > \
                     /tmp/data.tmp && mv /tmp/data.tmp "${DATA_FILE}"
             done
         done
