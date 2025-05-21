@@ -155,10 +155,8 @@ spec:
               name: $(params.cgwSecret)
               key: token
         - name: CGW_HOST
-          valueFrom:
-            secretKeyRef:
-              name: $(params.cgwHostname)
-              key: token
+          value: $(params.cgwHostname)
+
       script: |
         #!/bin/bash
         set -exo pipefail
