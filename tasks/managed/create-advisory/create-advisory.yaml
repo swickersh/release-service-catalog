@@ -169,7 +169,8 @@ spec:
           DATA_FILE="$(params.dataDir)/$(params.dataPath)"
           echo "DEBUG: Contents of $DATA_FILE before modification:"
           cat "$DATA_FILE"
-          ADVISORY_JSON_KEY="$(params.jsonKey)"
+          ADVISORY_JSON_KEY=".releaseNotes.content.artifacts"
+
 
           COMPONENTS=$(jq -c '.mapping.components[] | select(.contentGateway)' "$DATA_FILE")
 
