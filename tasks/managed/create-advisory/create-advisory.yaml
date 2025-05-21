@@ -171,6 +171,7 @@ spec:
           cat "$DATA_FILE"
           #ADVISORY_JSON_KEY=".releaseNotes.content.artifacts"
           ADVISORY_JSON_KEY="$(params.jsonKey)"
+          artifacts_path=".releaseNotes.content.artifacts"
 
           COMPONENTS=$(jq -c '.mapping.components[] | select(.contentGateway)' "$DATA_FILE")
 
@@ -193,7 +194,7 @@ spec:
               done <<< "$URLS_JSON"
 
               # Get all advisory entries that match this component
-              MATCHING_ENTRIES=$(jq -c --arg name "$COMPONENT_NAME" "${ADVISORY_JSON_KEY}[] | select(.component == \$name)" "$DATA_FILE")
+              MATCHING_ENTRIES=$(jq -c --arg name "$COMPONENT_NAME" "${artifacts_path}[] | select(.component == \$name)" "$DATA_FILE")
 
               while IFS= read -r entry; do
                   ARCH=$(jq -r '.architecture' <<< "$entry")
@@ -245,8 +246,7 @@ spec:
           echo "Error: advisory live id is only allowed if allow_custom_live_id is set to true"
           exit 1
         fi
-        advisoryData=$(jq -c "$(params.jsonKey)" "$(workspaces.data.path)/$(params.dataPath)")
-        configMapName=$(jq -er '.sign.configMapName' "$(workspaces.data.path)/$(params.dataPath)")
+
         # Validate type
         advisoryType=$(jq -r '.type' <<< "$advisoryData")
         if [ "$advisoryType" == "null" ]; then
