@@ -180,7 +180,7 @@ spec:
 
               # fetch the downloadURLs inside the loop because the files are organized by component
               echo "Fetching download URLs for $PRODUCT_CODE $VERSION_NAME..."
-              URLS_JSON=$(python3 utils/get_cgw_download_urls.py --product "$PRODUCT_CODE" --version "$VERSION_NAME")
+              URLS_JSON=$(python3 /home/utils/get_cgw_download_urls.py --product "$PRODUCT_CODE" --version "$VERSION_NAME")
 
               # Create a map of basename -> full download URL
               declare -A FILE_URL_MAP
