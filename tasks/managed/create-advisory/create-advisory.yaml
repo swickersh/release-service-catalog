@@ -371,7 +371,7 @@ spec:
           # is complete and stakeholders are ready to ingest these advisories
           prodSecretName="create-advisory-poc-secret"
           prodErrataSecretName="errata-stage-service-account"
-          stagingSecretName="create-advisory-poc-secret"
+          stagingSecretName="create-advisory-poc-stage-secret"
           stagingErrataSecretName="errata-stage-service-account"
 
           DATA_FILE="$(params.dataDir)/$(params.dataPath)"

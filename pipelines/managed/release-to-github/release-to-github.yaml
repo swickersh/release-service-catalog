@@ -570,6 +570,8 @@ spec:
           value: "$(tasks.populate-release-notes.results.sourceDataArtifact)"
         - name: dataDir
           value: $(params.dataDir)
+        - name: environment
+          value: ""
         - name: trustedArtifactsDebug
           value: "$(params.trustedArtifactsDebug)"
         - name: taskGitUrl
