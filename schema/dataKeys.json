@@ -158,23 +158,6 @@
           "type": "string",
           "description": "The product version e.g v1.0.0"
         },
-        "product_stream": {
-          "type": "string",
-          "description": "The product stream e.g. RHEL-tp1"
-        },
-        "cpe": {
-          "type": "string",
-          "description": "The product CPE ID e.g. cpe:/a:example:openstack:el8"
-        },
-        "type": {
-          "type": "string",
-          "enum": [
-            "RHEA",
-            "RHBA",
-            "RHSA"
-          ],
-          "description": "Type advisory type e.g. RHSA"
-        },
         "synopsis": {
           "type": "string",
           "description": "The advisory synopsis e.g. my advisory synopsis"
@@ -936,8 +919,6 @@
               "product_id",
               "product_name",
               "product_version",
-              "product_stream",
-              "cpe",
               "synopsis",
               "topic",
               "description",
