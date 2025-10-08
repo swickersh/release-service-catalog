@@ -290,6 +290,16 @@ spec:
           ADVISORY_FILEPATH="${ADVISORY_DIR}/advisory.yaml"
           ADVISORY_NAME="${YEAR}:${ADVISORY_NUM}"
 
+          ############# FOR TESTING, DELETE THIS
+          advisoryJsonWithKey=$(jq -c '
+            .product_stream = (.product_stream // "v1.2") |
+            .cpe = (.cpe // "cpe:/a:redhat:releng_test_product:1.2")
+          ' <<< "$advisoryJsonWithKey")
+
+          # Wrap input under .advisory.spec
+          DATA=$(jq -c '{"advisory":{"spec":.}}' <<< "$advisoryJsonWithKey")
+          ################################################# DELETE TO HERE
+
           # Prepare variables for the advisory template
           # Write to file to avoid argument length limits
           jq -c '{"advisory":{"spec":.}}' /tmp/advisory_with_key.json > /tmp/template_data.json
