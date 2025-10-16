@@ -459,7 +459,7 @@ spec:
         cp "/etc/secrets/mac_fingerprint" /tmp/.ssh/known_hosts
         chmod 600 /tmp/.ssh/id_rsa /tmp/.ssh/known_hosts
 
-        SSH_OPTS=(-i /tmp/.ssh/id_rsa -o UserKnownHostsFile=/tmp/.ssh/known_hosts)
+        SSH_OPTS=(-i /tmp/.ssh/id_rsa -o UserKnownHostsFile=/tmp/.ssh/known_hosts -vvv)
 
         # shell check complains about the variable (unsigned_digest) not being used but it is used in the script
         # shellcheck disable=SC2034
