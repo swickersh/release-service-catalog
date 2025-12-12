@@ -1,0 +1,149 @@
+---
+apiVersion: tekton.dev/v1
+kind: Pipeline
+metadata:
+  name: test-push-artifacts-to-cdn-generic-destinations
+spec:
+  description: |
+    Comprehensive test for generic (non-binary) content with all destination scenarios:
+    - Component 1: Both portals (Developer Portal via .files[] + Customer Portal via .staged{})
+    - Component 2: Customer Portal only (.staged{} without .files[])
+    - Component 3: Developer Portal only (.files[] without .staged{})
+    Verifies generic content skips signing/checksums regardless of destination.
+  tasks:
+    - name: run-task
+      taskRef:
+        name: push-artifacts-to-cdn-task
+      params:
+        - name: snapshot_json
+          value: >-
+            {
+              "application": "generic-destinations-app",
+              "artifacts": {},
+              "components": [
+                {
+                  "containerImage": "quay.io/org/tenant/generic-artifact@sha256:abcdef12345",
+                  "contentGateway": {
+                    "productCode": "GenericProduct",
+                    "productName": "Generic Product",
+                    "productVersionName": "1.0.0"
+                  },
+                  "contentType": "generic",
+                  "name": "both-portals",
+                  "files": [
+                    {
+                      "filename": "generic-devportal-file.tar.gz",
+                      "source": "/releases/testproduct-binary-linux-amd64.tar.gz"
+                    }
+                  ],
+                  "staged": {
+                    "destination": "generic-product-files",
+                    "version": "1.0",
+                    "files": [
+                      {
+                        "filename": "generic-pulp-file.tar.gz",
+                        "source": "/releases/testproduct-binary-darwin-amd64.tar.gz"
+                      }
+                    ]
+                  }
+                },
+                {
+                  "containerImage": "quay.io/org/tenant/generic-artifact@sha256:ghijkl67890",
+                  "contentType": "generic",
+                  "name": "pulp-only",
+                  "staged": {
+                    "destination": "generic-pulp-only-files",
+                    "version": "1.0",
+                    "files": [
+                      {
+                        "filename": "pulp-only-artifact.tar.gz",
+                        "source": "/releases/testproduct2-binary-linux-amd64.tar.gz"
+                      }
+                    ]
+                  }
+                },
+                {
+                  "containerImage": "quay.io/org/tenant/generic-artifact@sha256:mnopqr13579",
+                  "contentGateway": {
+                    "productCode": "GenericDevPortal",
+                    "productName": "Generic DevPortal Product",
+                    "productVersionName": "1.0.0"
+                  },
+                  "contentType": "generic",
+                  "name": "devportal-only",
+                  "files": [
+                    {
+                      "filename": "devportal-only-artifact.tar.gz",
+                      "source": "/releases/testproduct-binary-windows-amd64.tar.gz"
+                    }
+                  ]
+                }
+              ]
+            }
+        - name: exodusGwSecret
+          value: "pulp-task-exodus-secret"
+        - name: exodusGwEnv
+          value: "pre"
+        - name: pulpSecret
+          value: "pulp-task-pulp-secret"
+        - name: udcacheSecret
+          value: "pulp-task-udc-secret"
+        - name: cgwHostname
+          value: "https://content-gateway.com"
+        - name: cgwSecret
+          value: "pulp-task-cgw-secret"
+        - name: author
+          value: testuser
+        - name: signingKeyName
+          value: testkey
+    - name: check-result
+      runAfter:
+        - run-task
+      params:
+        - name: result
+          value: $(tasks.run-task.results.result)
+        - name: publishedFiles
+          value: $(tasks.run-task.results.publishedFiles)
+      taskSpec:
+        params:
+          - name: result
+            type: string
+          - name: publishedFiles
+            type: string
+        steps:
+          - name: check-result
+            image: quay.io/konflux-ci/release-service-utils:7072b5b5aa2cc0fc44baf8fb9f8e4a3540fc4fed
+            script: |
+              #!/usr/bin/env bash
+              set -ex
+
+              if [[ "$(params.result)" != "Success" ]]; then
+                echo "Error: result task result expected to be Success but was not"
+                exit 1
+              fi
+
+              echo "Published files:"
+              echo "$(params.publishedFiles)"
+
+              # Verify all 3 components have files in their directories
+              if ! echo "$(params.publishedFiles)" | grep -q '^both-portals/ready_for_distribution/'; then
+                echo "Error: both-portals component files missing"
+                exit 1
+              fi
+              if ! echo "$(params.publishedFiles)" | grep -q '^pulp-only/ready_for_distribution/'; then
+                echo "Error: pulp-only component files missing"
+                exit 1
+              fi
+              if ! echo "$(params.publishedFiles)" | grep -q '^devportal-only/ready_for_distribution/'; then
+                echo "Error: devportal-only component files missing"
+                exit 1
+              fi
+
+              # For generic content, NO component should have sha256sum.txt
+              if echo "$(params.publishedFiles)" | grep -q 'sha256sum\.txt'; then
+                echo "Error: generic content should NOT have sha256sum.txt (no signing for generic)"
+                exit 1
+              fi
+
+              echo "Test passed: generic content with all destination scenarios (no checksums for any)"
+

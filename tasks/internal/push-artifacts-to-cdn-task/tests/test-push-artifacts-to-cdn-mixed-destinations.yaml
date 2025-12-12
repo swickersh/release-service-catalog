@@ -1,0 +1,153 @@
+---
+apiVersion: tekton.dev/v1
+kind: Pipeline
+metadata:
+  name: test-push-artifacts-to-cdn-mixed-destinations
+spec:
+  description: |
+    Run the push-artifacts task with components using different destination combinations:
+    - Component A: Both portals (Developer Portal via .files[] + Customer Portal via .staged{})
+    - Component B: Customer Portal only (.staged{} without .files[])
+    Verifies per-component destination handling works correctly.
+  tasks:
+    - name: run-task
+      taskRef:
+        name: push-artifacts-to-cdn-task
+      params:
+        - name: snapshot_json
+          value: >-
+            {
+              "application": "mixed-destinations-app",
+              "artifacts": {},
+              "components": [
+                {
+                  "containerImage": "quay.io/org/tenant/component-a@sha256:abcdef12345",
+                  "contentGateway": {
+                    "productCode": "ProductA",
+                    "productName": "Product A",
+                    "productVersionName": "1.0.0"
+                  },
+                  "contentType": "binary",
+                  "name": "testproduct",
+                  "files": [
+                    {
+                      "filename": "product-a-windows-amd64.zip",
+                      "source": "/releases/testproduct-binary-windows-amd64.tar.gz"
+                    },
+                    {
+                      "filename": "product-a-darwin-amd64.tar.gz",
+                      "source": "/releases/testproduct-binary-darwin-amd64.tar.gz"
+                    },
+                    {
+                      "filename": "product-a-linux-amd64.tar.gz",
+                      "source": "/releases/testproduct-binary-linux-amd64.tar.gz"
+                    }
+                  ],
+                  "staged": {
+                    "destination": "product-a-1_DOT_0-for-rhel-9-x86_64-files",
+                    "version": "1.0",
+                    "files": [
+                      {
+                        "filename": "product-a-linux-amd64-1.0.tar.gz",
+                        "source": "/releases/testproduct-binary-linux-amd64.tar.gz"
+                      },
+                      {
+                        "filename": "product-a-darwin-amd64-1.0.tar.gz",
+                        "source": "/releases/testproduct-binary-darwin-amd64.tar.gz"
+                      }
+                    ]
+                  }
+                },
+                {
+                  "containerImage": "quay.io/org/tenant/component-b@sha256:ghijkl67890",
+                  "contentGateway": {
+                    "productCode": "ProductB",
+                    "productName": "Product B",
+                    "productVersionName": "2.0.0"
+                  },
+                  "contentType": "binary",
+                  "name": "testproduct2",
+                  "staged": {
+                    "destination": "product-b-2_DOT_0-for-rhel-9-aarch64-files",
+                    "version": "2.0",
+                    "files": [
+                      {
+                        "filename": "product-b-linux-arm64-2.0.tar.gz",
+                        "source": "/releases/testproduct2-binary-linux-amd64.tar.gz"
+                      },
+                      {
+                        "filename": "product-b-darwin-arm64-2.0.tar.gz",
+                        "source": "/releases/testproduct2-binary-darwin-amd64.tar.gz"
+                      }
+                    ]
+                  }
+                }
+              ]
+            }
+        - name: exodusGwSecret
+          value: "pulp-task-exodus-secret"
+        - name: exodusGwEnv
+          value: "pre"
+        - name: pulpSecret
+          value: "pulp-task-pulp-secret"
+        - name: udcacheSecret
+          value: "pulp-task-udc-secret"
+        - name: cgwHostname
+          value: "https://content-gateway.com"
+        - name: cgwSecret
+          value: "pulp-task-cgw-secret"
+        - name: author
+          value: testuser
+        - name: signingKeyName
+          value: testkey
+    - name: check-result
+      runAfter:
+        - run-task
+      params:
+        - name: result
+          value: $(tasks.run-task.results.result)
+        - name: publishedFiles
+          value: $(tasks.run-task.results.publishedFiles)
+      taskSpec:
+        params:
+          - name: result
+            type: string
+          - name: publishedFiles
+            type: string
+        steps:
+          - name: check-result
+            image: quay.io/konflux-ci/release-service-utils:7072b5b5aa2cc0fc44baf8fb9f8e4a3540fc4fed
+            script: |
+              #!/usr/bin/env bash
+              set -ex
+
+              if [[ "$(params.result)" != "Success" ]]; then
+                echo "Error: result task result expected to be Success but was not"
+                exit 1
+              fi
+
+              echo "Published files:"
+              echo "$(params.publishedFiles)"
+
+              # Verify both binary components have sha256sum.txt (checksums generated)
+              if ! echo "$(params.publishedFiles)" | grep -q '^testproduct/ready_for_distribution/sha256sum\.txt$'; then
+                echo "Error: testproduct (binary) should have sha256sum.txt"
+                exit 1
+              fi
+              if ! echo "$(params.publishedFiles)" | grep -q '^testproduct2/ready_for_distribution/sha256sum\.txt$'; then
+                echo "Error: testproduct2 (binary) should have sha256sum.txt"
+                exit 1
+              fi
+
+              # Verify both components have files in their directories
+              if ! echo "$(params.publishedFiles)" | grep -q '^testproduct/ready_for_distribution/'; then
+                echo "Error: testproduct files missing"
+                exit 1
+              fi
+              if ! echo "$(params.publishedFiles)" | grep -q '^testproduct2/ready_for_distribution/'; then
+                echo "Error: testproduct2 files missing"
+                exit 1
+              fi
+
+              echo "Test passed: mixed destinations with binary content (both have checksums)"
+

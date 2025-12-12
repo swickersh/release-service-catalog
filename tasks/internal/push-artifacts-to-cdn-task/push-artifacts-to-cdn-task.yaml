@@ -15,6 +15,13 @@ spec:
     (Pulp) and to CGW; if components contain `staged` data only, artifacts are
     pushed to the Customer Portal (Pulp); if components contain `contentGateway`
     data only, artifacts are pushed to the Developer Portal (exodus-rsync) and CGW.
+    
+    The task supports different content types via the `contentType` field at the
+    component level:
+    - `binary` (default): Full signing flow with Mac/Windows code signing, GPG-signed
+      checksums.
+    - `generic`: Pass-through mode for arbitrary files. No signing, no checksums, no
+      transformation. Files are delivered exactly as provided in the container.
   params:
     - name: snapshot_json
       type: string
@@ -352,13 +359,32 @@ spec:
             wait -n
         done
 
-        # Create flag files based on OS types specified in the RPA mapping (files array)
+        # Create flag files based on content type and OS types specified in the RPA mapping
         # This ensures we only process OS types that are configured for release, not everything in the container
         FILES_QUERY='(.files[]?, .staged.files[]?)'
         for ((i = 0; i < NUM_COMPONENTS; i++)); do
           COMPONENT=$(jq -c --arg i "$i" '.components[$i|tonumber]' <<< "$SNAPSHOT_JSON")
           COMPONENT_NAME=$(jq -r '.name' <<< "$COMPONENT")
           component_dir="$CONTENT_DIR/$COMPONENT_NAME"
+          
+          # Skip if component directory doesn't exist (component was skipped - no files)
+          if [ ! -d "$component_dir" ]; then
+            echo "Skipping content type detection for '$COMPONENT_NAME' - component was skipped"
+            continue
+          fi
+          
+          # Detect content type - default to "binary" for backward compatibility
+          # Check contentGateway.contentType first, then component-level contentType
+          CONTENT_TYPE=$(jq -r '.contentGateway?.contentType // .contentType // "binary"' <<< "$COMPONENT")
+          echo "$CONTENT_TYPE" > "$component_dir/content_type"
+          echo "Component '$COMPONENT_NAME' has contentType: $CONTENT_TYPE"
+          
+          # Skip OS detection for non-binary content types (e.g., generic)
+          # These files don't need code signing and shouldn't be sorted by OS
+          if [[ "$CONTENT_TYPE" != "binary" ]]; then
+            echo "  - Skipping OS detection for $CONTENT_TYPE content (no code signing needed)"
+            continue
+          fi
           
           echo "Checking configured OS types for component: $COMPONENT_NAME"
           
@@ -466,6 +492,21 @@ spec:
           fi
           
           COMPONENT_DIR="$CONTENT_DIR/$COMPONENT_NAME"
+          
+          # Read content type from flag file created in extract step
+          CONTENT_TYPE="binary"
+          if [ -f "$COMPONENT_DIR/content_type" ]; then
+            CONTENT_TYPE=$(cat "$COMPONENT_DIR/content_type")
+          fi
+          
+          # For non-binary content types (e.g., generic), skip OS-based sorting
+          # Files stay flat in component directory - no signing needed
+          # Do NOT unpack archives - preserve original file format for non-binary content
+          if [[ "$CONTENT_TYPE" != "binary" ]]; then
+            echo "Component '$COMPONENT_NAME' is $CONTENT_TYPE content - preserving files as-is (no unpacking or OS sorting)"
+            continue
+          fi
+          
           UNSIGNED_DIR="$COMPONENT_DIR/unsigned"
           MAC_CONTENT="$UNSIGNED_DIR/macos"
           WINDOWS_CONTENT="$UNSIGNED_DIR/windows"
@@ -494,18 +535,12 @@ spec:
           done || true
 
           # Then move unpacked files to appropriate directories based on OS
-          # Note: Skip has_* flag files - they must stay in the component root directory
+          # Note: Skip has_* flag files and content_type - they must stay in the component root directory
           # Only move files if the target directory exists (i.e., that OS type is configured in RPA)
           # Note: The || true at the end prevents the while loop's exit code from triggering set -e
           find "$COMPONENT_DIR" -maxdepth 1 -type f 2>/dev/null | while read -r file; do
             case "$file" in
-              (*/has_mac)
-                # Skip flag files - they need to stay in the component root directory
-                ;;
-              (*/has_windows)
-                # Skip flag files - they need to stay in the component root directory
-                ;;
-              (*/has_linux)
+              (*/has_mac|*/has_windows|*/has_linux|*/content_type)
                 # Skip flag files - they need to stay in the component root directory
                 ;;
               (*darwin*)
@@ -631,6 +666,16 @@ spec:
           COMPONENT=$(jq -c --arg i "$c" '.components[$i|tonumber]' <<< "$SNAPSHOT_JSON")
           COMPONENT_NAME=$(jq -r '.name' <<< "$COMPONENT")
           COMPONENT_DIR="$CONTENT_DIR/$COMPONENT_NAME"
+
+          # Read content type - skip non-binary content (no code signing needed)
+          CONTENT_TYPE="binary"
+          if [ -f "$COMPONENT_DIR/content_type" ]; then
+            CONTENT_TYPE=$(cat "$COMPONENT_DIR/content_type")
+          fi
+          if [[ "$CONTENT_TYPE" != "binary" ]]; then
+            echo "Component $COMPONENT_NAME is $CONTENT_TYPE content, skipping Mac signing..."
+            continue
+          fi
 
           # Skip if no macOS content for this component
           if [ ! -f "$COMPONENT_DIR/has_mac" ]; then
@@ -792,6 +837,16 @@ spec:
           COMPONENT=$(jq -c --arg i "$c" '.components[$i|tonumber]' <<< "$SNAPSHOT_JSON")
           COMPONENT_NAME=$(jq -r '.name' <<< "$COMPONENT")
           COMPONENT_DIR="$CONTENT_DIR/$COMPONENT_NAME"
+
+          # Read content type - skip non-binary content (no code signing needed)
+          CONTENT_TYPE="binary"
+          if [ -f "$COMPONENT_DIR/content_type" ]; then
+            CONTENT_TYPE=$(cat "$COMPONENT_DIR/content_type")
+          fi
+          if [[ "$CONTENT_TYPE" != "binary" ]]; then
+            echo "Component $COMPONENT_NAME is $CONTENT_TYPE content, skipping Windows signing..."
+            continue
+          fi
 
           # Skip if no Windows content for this component
           if [ ! -f "$COMPONENT_DIR/has_windows" ]; then
@@ -992,10 +1047,31 @@ spec:
 
           echo "Generating checksums for component: $COMPONENT_NAME"
 
+          # Read content type from flag file
+          CONTENT_TYPE="binary"
+          if [ -f "$COMPONENT_DIR/content_type" ]; then
+            CONTENT_TYPE=$(cat "$COMPONENT_DIR/content_type")
+          fi
+
           # Create signed directory structure for this component
           SIGNED_DIR="$COMPONENT_DIR/signed"
           mkdir -p "$SIGNED_DIR"
 
+          # Handle non-binary content (e.g., generic) differently
+          # - No OS subdirectories, files stay flat
+          # - No GPG signing of checksums
+          if [[ "$CONTENT_TYPE" != "binary" ]]; then
+            echo "Component '$COMPONENT_NAME' is $CONTENT_TYPE content - copying files directly (no GPG signing)"
+            # Copy files directly from component directory to signed directory
+            # Skip flag files (content_type)
+            find "$COMPONENT_DIR" -maxdepth 1 -type f ! -name "content_type" 2>/dev/null | while read -r file; do
+              cp "$file" "$SIGNED_DIR/"
+            done
+            cd "$CONTENT_DIR"
+            continue
+          fi
+
+          # Binary content - full signing flow with OS directories
           # Copy linux files to signed directory (if linux content exists)
           if [ -f "$COMPONENT_DIR/has_linux" ]; then
             mkdir -p "$SIGNED_DIR/linux"
@@ -1123,6 +1199,27 @@ spec:
           
           mkdir -p "$READY_FOR_DIST_DIR"
           echo "Compressing artifacts for component: $COMPONENT_NAME"
+
+          # Read content type from flag file
+          CONTENT_TYPE="binary"
+          if [ -f "$COMPONENT_DIR/content_type" ]; then
+            CONTENT_TYPE=$(cat "$COMPONENT_DIR/content_type")
+          fi
+
+          # Handle non-binary content (e.g., generic) differently
+          # Just copy files directly without OS-based compression
+          if [[ "$CONTENT_TYPE" != "binary" ]]; then
+            echo "Component '$COMPONENT_NAME' is $CONTENT_TYPE content - copying files directly"
+            # For non-binary content, files stay in the component directory (no signing step)
+            # Skip flag files (has_*, content_type) - only copy actual artifact files
+            find "$COMPONENT_DIR" -maxdepth 1 -type f ! -name "has_*" ! -name "content_type" 2>/dev/null | while read -r file; do
+              cp "$file" "$READY_FOR_DIST_DIR/"
+              echo "  Copied: $(basename "$file")"
+            done
+            return 0
+          fi
+
+          # Binary content - use OS-based compression logic
 
           # Helper function to compress a single file entry
           # Args: $1 = FILE JSON, $2 = "files" or "staged" (for logging)
@@ -1387,8 +1484,10 @@ spec:
         CONTENT_DIR="/shared/artifacts"
 
         # save the results - list all files from all component ready_for_distribution directories
-        find "${CONTENT_DIR}"/*/ready_for_distribution -type f -exec basename {} \; 2>/dev/null \
-          | tail -c 512 | tee "$(results.publishedFiles.path)"
+        # Output relative paths (component/ready_for_distribution/filename) for better assertions
+        cd "${CONTENT_DIR}"
+        find */ready_for_distribution -type f 2>/dev/null \
+          | tail -c 4096 | tee "$(results.publishedFiles.path)"
 
         create_exodus_conf() {
           echo "Creating Exodus configuration file....."

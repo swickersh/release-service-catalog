@@ -246,11 +246,21 @@ function ssh() {
 
 function scp() {
     echo Mocking scp call with: $*
+    args=($@)
+    dest="${args[-1]}"
+    
     # Handle digest file copies - write mock digest to destination
     if [[ "$*" =~ .*digest.txt.* ]] || [[ "$*" =~ .*_digest.txt ]]; then
-        args=($@)
-        dest="${args[-1]}"
         echo sha256:$(echo | sha256sum |awk '{ print $1}') > "$dest"
+    fi
+    
+    # Handle signed checksum file copies (sha256sum.txt.sig and sha256sum.txt.gpg)
+    # These are copied back from the remote checksum host after GPG signing
+    if [[ "$*" =~ sha256sum\.txt\.sig ]]; then
+        echo "Mock GPG clearsigned checksum file" > "$dest"
+    fi
+    if [[ "$*" =~ sha256sum\.txt\.gpg ]]; then
+        echo "Mock GPG binary signed checksum file" > "$dest"
     fi
     echo
 }

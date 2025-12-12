@@ -1,0 +1,206 @@
+---
+apiVersion: tekton.dev/v1
+kind: Pipeline
+metadata:
+  name: test-push-artifacts-to-cdn-two-binary-both-portals
+spec:
+  description: |
+    Comprehensive test with two binary components, each with files going to both portals:
+    - Developer Portal (exodus-rsync CDN + CGW) via .files[]
+    - Customer Portal (Pulp) via .staged{}
+    Each component has multiple OS types (Windows, Linux, macOS) and architectures.
+    This represents a realistic multi-product release scenario.
+  tasks:
+    - name: run-task
+      taskRef:
+        name: push-artifacts-to-cdn-task
+      params:
+        - name: snapshot_json
+          value: >-
+            {
+              "application": "two-binary-both-portals-app",
+              "artifacts": {},
+              "components": [
+                {
+                  "containerImage": "quay.io/org/tenant/releng-test-product-binaries@sha256:abcdef12345",
+                  "contentGateway": {
+                    "productCode": "RelengTestProduct",
+                    "productName": "Releng Test Product",
+                    "productVersionName": "1.7.0"
+                  },
+                  "contentType": "binary",
+                  "name": "testproduct",
+                  "files": [
+                    {
+                      "arch": "amd64",
+                      "os": "windows",
+                      "filename": "releng-test-product-binaries-windows-amd64.tar.gz",
+                      "source": "/releases/testproduct-binary-windows-amd64.tar.gz"
+                    },
+                    {
+                      "arch": "amd64",
+                      "os": "linux",
+                      "filename": "releng-test-product-binaries-linux-amd64.tar.gz",
+                      "source": "/releases/testproduct-binary-linux-amd64.tar.gz"
+                    },
+                    {
+                      "arch": "amd64",
+                      "os": "darwin",
+                      "filename": "releng-test-product-binaries-darwin-amd64.tar.gz",
+                      "source": "/releases/testproduct-binary-darwin-amd64.tar.gz"
+                    },
+                    {
+                      "arch": "arm64",
+                      "os": "linux",
+                      "filename": "releng-test-product-binaries-linux-arm64.tar.gz",
+                      "source": "/releases/testproduct-binary-linux-amd64.tar.gz"
+                    },
+                    {
+                      "arch": "arm64",
+                      "os": "darwin",
+                      "filename": "releng-test-product-binaries-darwin-arm64.tar.gz",
+                      "source": "/releases/testproduct-binary-darwin-amd64.tar.gz"
+                    }
+                  ],
+                  "staged": {
+                    "destination": "konflux-release-e2e-1_DOT_0-for-rhel-10-x86_64-files",
+                    "version": "1.7.0",
+                    "files": [
+                      {
+                        "filename": "releng-test-product-binaries-linux-amd64-1.7.0.tar.gz",
+                        "source": "/releases/testproduct-binary-linux-amd64.tar.gz"
+                      },
+                      {
+                        "filename": "releng-test-product-binaries-darwin-amd64-1.7.0.tar.gz",
+                        "source": "/releases/testproduct-binary-darwin-amd64.tar.gz"
+                      }
+                    ]
+                  },
+                  "pushSourceContainer": false
+                },
+                {
+                  "containerImage": "quay.io/org/tenant/konflux-test-product2@sha256:ghijkl67890",
+                  "contentGateway": {
+                    "productCode": "RelengTestProduct",
+                    "productName": "Releng Test Product",
+                    "productVersionName": "1.7.0"
+                  },
+                  "contentType": "binary",
+                  "name": "testproduct2",
+                  "files": [
+                    {
+                      "arch": "amd64",
+                      "os": "windows",
+                      "filename": "ktp2-windows-amd64.tar.gz",
+                      "source": "/releases/testproduct2-binary-windows-amd64.tar.gz"
+                    },
+                    {
+                      "arch": "amd64",
+                      "os": "linux",
+                      "filename": "ktp2-linux-amd64.tar.gz",
+                      "source": "/releases/testproduct2-binary-linux-amd64.tar.gz"
+                    },
+                    {
+                      "arch": "amd64",
+                      "os": "darwin",
+                      "filename": "ktp2-darwin-amd64.tar.gz",
+                      "source": "/releases/testproduct2-binary-darwin-amd64.tar.gz"
+                    },
+                    {
+                      "arch": "arm64",
+                      "os": "linux",
+                      "filename": "ktp2-linux-arm64.tar.gz",
+                      "source": "/releases/testproduct2-binary-linux-amd64.tar.gz"
+                    },
+                    {
+                      "arch": "arm64",
+                      "os": "darwin",
+                      "filename": "ktp2-darwin-arm64.tar.gz",
+                      "source": "/releases/testproduct2-binary-darwin-amd64.tar.gz"
+                    }
+                  ],
+                  "staged": {
+                    "destination": "konflux-release-e2e-1_DOT_0-for-rhel-10-aarch64-files",
+                    "version": "1.7.0",
+                    "files": [
+                      {
+                        "filename": "ktp2-linux-arm64-1.7.0.tar.gz",
+                        "source": "/releases/testproduct2-binary-linux-amd64.tar.gz"
+                      },
+                      {
+                        "filename": "ktp2-darwin-arm64-1.7.0.tar.gz",
+                        "source": "/releases/testproduct2-binary-darwin-amd64.tar.gz"
+                      }
+                    ]
+                  },
+                  "pushSourceContainer": false
+                }
+              ]
+            }
+        - name: exodusGwSecret
+          value: "pulp-task-exodus-secret"
+        - name: exodusGwEnv
+          value: "pre"
+        - name: pulpSecret
+          value: "pulp-task-pulp-secret"
+        - name: udcacheSecret
+          value: "pulp-task-udc-secret"
+        - name: cgwHostname
+          value: "https://content-gateway.com"
+        - name: cgwSecret
+          value: "pulp-task-cgw-secret"
+        - name: author
+          value: testuser
+        - name: signingKeyName
+          value: testkey
+    - name: check-result
+      runAfter:
+        - run-task
+      params:
+        - name: result
+          value: $(tasks.run-task.results.result)
+        - name: publishedFiles
+          value: $(tasks.run-task.results.publishedFiles)
+      taskSpec:
+        params:
+          - name: result
+            type: string
+          - name: publishedFiles
+            type: string
+        steps:
+          - name: check-result
+            image: quay.io/konflux-ci/release-service-utils:7072b5b5aa2cc0fc44baf8fb9f8e4a3540fc4fed
+            script: |
+              #!/usr/bin/env bash
+              set -ex
+
+              if [[ "$(params.result)" != "Success" ]]; then
+                echo "Error: result task result expected to be Success but was not"
+                exit 1
+              fi
+
+              echo "Published files:"
+              echo "$(params.publishedFiles)"
+
+              # Verify both binary components have sha256sum.txt (checksums generated)
+              if ! echo "$(params.publishedFiles)" | grep -q '^testproduct/ready_for_distribution/sha256sum\.txt$'; then
+                echo "Error: testproduct (binary) should have sha256sum.txt"
+                exit 1
+              fi
+              if ! echo "$(params.publishedFiles)" | grep -q '^testproduct2/ready_for_distribution/sha256sum\.txt$'; then
+                echo "Error: testproduct2 (binary) should have sha256sum.txt"
+                exit 1
+              fi
+
+              # Verify both components have files in their directories
+              if ! echo "$(params.publishedFiles)" | grep -q '^testproduct/ready_for_distribution/'; then
+                echo "Error: testproduct files missing"
+                exit 1
+              fi
+              if ! echo "$(params.publishedFiles)" | grep -q '^testproduct2/ready_for_distribution/'; then
+                echo "Error: testproduct2 files missing"
+                exit 1
+              fi
+
+              echo "Test passed: two binary components with both portals (both have checksums)"
+
