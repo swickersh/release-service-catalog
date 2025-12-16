@@ -1,0 +1,276 @@
+---
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: extract-artifacts-from-snapshot
+  annotations:
+    tekton.dev/pipelines.minVersion: "0.12.1"
+    tekton.dev/tags: release
+spec:
+  description: |-
+    Extracts binary artifacts from container images in a snapshot. This task processes
+    each component, pulls the container image, and extracts only the files specified
+    in the ReleasePlanAdmission (files[] and staged.files[] arrays). It also creates
+    OS type flag files (has_mac, has_windows, has_linux) for downstream tasks.
+  params:
+    - name: snapshot_json
+      type: string
+      description: String containing a JSON representation of the snapshot spec
+    - name: concurrentLimit
+      type: string
+      description: The maximum number of images to be pulled at once
+      default: "3"
+    - name: caTrustConfigMapName
+      type: string
+      description: The name of the ConfigMap to read CA bundle data from
+      default: trusted-ca
+    - name: caTrustConfigMapKey
+      type: string
+      description: The name of the key in the ConfigMap that contains the CA bundle data
+      default: ca-bundle.crt
+  workspaces:
+    - name: artifacts
+      description: Workspace where extracted artifacts will be stored
+  volumes:
+    - name: redhat-workloads-token
+      secret:
+        secretName: redhat-workloads-token
+        defaultMode: 0444
+    - name: trusted-ca
+      configMap:
+        name: $(params.caTrustConfigMapName)
+        items:
+          - key: $(params.caTrustConfigMapKey)
+            path: ca-bundle.crt
+        optional: true
+  stepTemplate:
+    volumeMounts:
+      - name: trusted-ca
+        mountPath: /mnt/trusted-ca
+        readOnly: true
+  results:
+    - name: result
+      description: Success if the task succeeds, the error otherwise
+  steps:
+    - name: extract-artifacts
+      image: quay.io/konflux-ci/release-service-utils@sha256:454e457cdadd5892b31fe2b7d4911b3d3a761f5705bb0cd30f864be0a597594b
+      securityContext:
+        runAsUser: 1001
+      computeResources:
+        limits:
+          memory: 512Mi
+        requests:
+          memory: 512Mi
+          cpu: 250m
+      volumeMounts:
+        - name: redhat-workloads-token
+          mountPath: /mnt/redhat-workloads-token
+      env:
+        - name: "SNAPSHOT_JSON"
+          value: "$(params.snapshot_json)"
+      script: |
+        #!/usr/bin/env bash
+        set -e
+
+        DOCKER_CONFIG_JSON="$(cat /mnt/redhat-workloads-token/.dockerconfigjson)"
+
+        set -x
+
+        STDERR_FILE=/tmp/stderr.txt
+
+        exitfunc() {
+            local err=$1
+            local line=$2
+            local command="$3"
+            if [ "$err" -eq 0 ] ; then
+                echo -n "Success" > "$(results.result.path)"
+            else
+                echo "$0: ERROR '$command' failed at line $line - exited with status $err" \
+                  > "$(results.result.path)"
+                if [ -f "$STDERR_FILE" ] ; then
+                    # save output to the task result excluding the trace log
+                    grep -v "^\+" "$STDERR_FILE" | tail -c 512 | tee -a "$(results.result.path)"
+                fi
+            fi
+            exit 0 # exit the script cleanly as there is no point in proceeding past an error or exit call
+        }
+        # due to set -e, this catches all EXIT and ERR calls and the task should never fail with nonzero exit code
+        trap 'exitfunc $? $LINENO "$BASH_COMMAND"' EXIT
+
+        mkdir -p ~/.docker
+        set +x
+        # Quotes are added to the secret so it applies in k8s nicely. But now we have to remove them
+        echo "$DOCKER_CONFIG_JSON" | sed -r 's/(^|\})[^{}]+(\{|$)/\1\2/g' > ~/.docker/config.json
+        set -x
+
+        CONTENT_DIR="$(workspaces.artifacts.path)/artifacts"
+        export CONTENT_DIR
+        mkdir -p "$CONTENT_DIR"
+
+        process_component() { # Expected arguments: [component json] [component index (0-based)]
+            COMPONENT=$1
+            COMPONENT_INDEX=$2
+            COMPONENT_NUM=$((COMPONENT_INDEX + 1))  # 1-based for error messages
+            # Use component.name for directory isolation
+            COMPONENT_NAME=$(jq -er '.name' <<< "${COMPONENT}") \
+                  || (echo "Component ${COMPONENT_NUM} is missing 'name'" >&2 && exit 1 )
+            
+            # Check if component has files or staged.files - skip if neither exists
+            NUM_FILES=$(jq '.files | length // 0' <<< "${COMPONENT}")
+            NUM_STAGED_FILES=$(jq '.staged.files | length // 0' <<< "${COMPONENT}")
+            if [ "$NUM_FILES" -eq 0 ] && [ "$NUM_STAGED_FILES" -eq 0 ]; then
+              echo "Skipping component '${COMPONENT_NAME}' - no files defined (not a binary artifact component)"
+              return 0
+            fi
+            
+            PULLSPEC=$(jq -er '.containerImage' <<< "${COMPONENT}") \
+                  || (echo "Component ${COMPONENT_NAME} is missing 'containerImage'" >&2 && exit 1 )
+            DESTINATION="${CONTENT_DIR}/${COMPONENT_NAME}"
+            echo "Extracting component '${COMPONENT_NAME}' to: $DESTINATION"
+
+            mkdir -p "${DESTINATION}"
+
+            # Extract binaries from container image using skopeo (like extract-binaries-from-image task)
+            TMP_DIR=$(mktemp -d)
+
+            # Create auth file for skopeo
+            AUTH_FILE=$(mktemp)
+            select-oci-auth "${PULLSPEC}" > "$AUTH_FILE"
+
+            # Use skopeo to copy container manifest and layers
+            skopeo copy --retry-times 3 --authfile "$AUTH_FILE" docker://"$PULLSPEC" dir:"$TMP_DIR"
+
+            cd "$TMP_DIR"
+
+            # Build list of specific files to extract from files[] and staged.files[]
+            # We only want files explicitly listed in the RPA, not everything in the container
+            WANTED_FILES=()
+            EXTRACT_DIRS=()
+
+            # Check .files[].source paths
+            NUM_FILES=$(jq '.files | length // 0' <<< "${COMPONENT}")
+            for ((i = 0; i < NUM_FILES; i++)); do
+                SOURCE_PATH=$(jq -r --arg i "$i" '.files[$i|tonumber].source // empty' <<< "${COMPONENT}")
+                if [ -n "$SOURCE_PATH" ]; then
+                    # Store the full path (without leading /) for extraction
+                    WANTED_FILES+=("${SOURCE_PATH#/}")
+                    # Extract directory part for tar extraction
+                    DIR_PATH=$(dirname "$SOURCE_PATH" | sed 's|^/||')
+                    if [ "$DIR_PATH" != "." ] && [ -n "$DIR_PATH" ]; then
+                        EXTRACT_DIRS+=("$DIR_PATH")
+                    fi
+                fi
+            done
+
+            # Check .staged.files[].source paths
+            NUM_STAGED_FILES=$(jq '.staged.files | length // 0' <<< "${COMPONENT}")
+            for ((i = 0; i < NUM_STAGED_FILES; i++)); do
+                SOURCE_PATH=$(jq -r --arg i "$i" '.staged.files[$i|tonumber].source // empty' <<< "${COMPONENT}")
+                if [ -n "$SOURCE_PATH" ]; then
+                    # Store the full path (without leading /) for extraction
+                    WANTED_FILES+=("${SOURCE_PATH#/}")
+                    # Extract directory part for tar extraction
+                    DIR_PATH=$(dirname "$SOURCE_PATH" | sed 's|^/||')
+                    if [ "$DIR_PATH" != "." ] && [ -n "$DIR_PATH" ]; then
+                        EXTRACT_DIRS+=("$DIR_PATH")
+                    fi
+                fi
+            done
+
+            # Default to "releases" if no source directories found
+            if [ ${#EXTRACT_DIRS[@]} -eq 0 ]; then
+                EXTRACT_DIRS=("releases")
+            fi
+
+            # Remove duplicates
+            mapfile -t UNIQUE_DIRS < <(printf "%s\n" "${EXTRACT_DIRS[@]}" | sort -u)
+            mapfile -t UNIQUE_FILES < <(printf "%s\n" "${WANTED_FILES[@]}" | sort -u)
+
+            echo "Files to extract from RPA: ${UNIQUE_FILES[*]}"
+
+            # Extract the directories from container layers
+            for IMAGE_PATH in "${UNIQUE_DIRS[@]}"; do
+                echo "Looking for directory: $IMAGE_PATH"
+                for DIGEST in $(jq -r ".layers[].digest" manifest.json); do
+                    FILE=${DIGEST#sha256:}
+                    # Check if the archive contains the target dir
+                    if tar -tf "$FILE" | grep -q "^$IMAGE_PATH/"; then
+                        echo "Extracting $IMAGE_PATH/ from $FILE..."
+                        tar -xzvf "$FILE" "$IMAGE_PATH"
+                    else
+                        echo "skipping $FILE. It doesn't contain the $IMAGE_PATH dir"
+                    fi
+                done
+            done
+
+            # Copy ONLY files explicitly listed in the RPA (not all files from the directory)
+            for wanted_file in "${UNIQUE_FILES[@]}"; do
+                if [ -f "$wanted_file" ]; then
+                    cp "$wanted_file" "$DESTINATION"/
+                else
+                    echo "Warning: Expected file not found in container: $wanted_file"
+                fi
+            done
+
+            # Clean up temporary directory
+            rm -rf "$TMP_DIR"
+
+        }
+
+        RUNNING_JOBS="\j" # Bash parameter for number of jobs currently running
+        NUM_COMPONENTS=$(jq '.components | length' <<< "$SNAPSHOT_JSON")
+
+        # Pull each component in parallel
+        for ((i = 0; i < NUM_COMPONENTS; i++)) ; do
+            COMPONENT=$(jq -c --arg i "$i" '.components[$i|tonumber]' <<< "$SNAPSHOT_JSON")
+            # Limit batch size to concurrent limit
+            while (( ${RUNNING_JOBS@P} >= $(params.concurrentLimit) )); do
+                wait -n
+            done
+            process_component "$COMPONENT" "$i" 2> "$STDERR_FILE" &
+        done
+
+        # Wait for remaining processes to finish
+        while (( ${RUNNING_JOBS@P} > 0 )); do
+            wait -n
+        done
+
+        # Create flag files based on OS types specified in the RPA mapping (files array)
+        # This ensures we only process OS types that are configured for release, not everything in the container
+        FILES_QUERY='(.files[]?, .staged.files[]?)'
+        for ((i = 0; i < NUM_COMPONENTS; i++)); do
+          COMPONENT=$(jq -c --arg i "$i" '.components[$i|tonumber]' <<< "$SNAPSHOT_JSON")
+          COMPONENT_NAME=$(jq -r '.name' <<< "$COMPONENT")
+          component_dir="$CONTENT_DIR/$COMPONENT_NAME"
+          
+          echo "Checking configured OS types for component: $COMPONENT_NAME"
+          
+          # Check for macOS(darwin) in both .files[] and .staged.files[]
+          if jq -e "$FILES_QUERY | select(.os == \"darwin\")" <<< "$COMPONENT" >/dev/null 2>&1 || \
+             jq -e "$FILES_QUERY | select((.source // \"\") | contains(\"darwin\"))" \
+               <<< "$COMPONENT" >/dev/null 2>&1 || \
+             jq -e "$FILES_QUERY | select((.filename // \"\") | contains(\"darwin\"))" \
+               <<< "$COMPONENT" >/dev/null 2>&1; then
+            touch "$component_dir/has_mac"
+            echo "  - macOS content detected"
+          fi
+          # Check for Windows in both .files[] and .staged.files[]
+          if jq -e "$FILES_QUERY | select(.os == \"windows\")" <<< "$COMPONENT" >/dev/null 2>&1 || \
+             jq -e "$FILES_QUERY | select((.source // \"\") | contains(\"windows\"))" \
+               <<< "$COMPONENT" >/dev/null 2>&1 || \
+             jq -e "$FILES_QUERY | select((.filename // \"\") | contains(\"windows\"))" \
+               <<< "$COMPONENT" >/dev/null 2>&1; then
+            touch "$component_dir/has_windows"
+            echo "  - Windows content detected"
+          fi
+          # Check for Linux in both .files[] and .staged.files[]
+          if jq -e "$FILES_QUERY | select(.os == \"linux\")" <<< "$COMPONENT" >/dev/null 2>&1 || \
+             jq -e "$FILES_QUERY | select((.source // \"\") | contains(\"linux\"))" \
+               <<< "$COMPONENT" >/dev/null 2>&1 || \
+             jq -e "$FILES_QUERY | select((.filename // \"\") | contains(\"linux\"))" \
+               <<< "$COMPONENT" >/dev/null 2>&1; then
+            touch "$component_dir/has_linux"
+            echo "  - Linux content detected"
+          fi
+        done
+
