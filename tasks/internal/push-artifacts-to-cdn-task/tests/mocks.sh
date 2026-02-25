@@ -78,6 +78,47 @@ EOF
             rm -rf "$temp_bin_dir"
         }
 
+        create_mock_tgz_with_non_binary_files() {
+            local filename="$1"
+            local binary_name="${filename%.tar.gz}"
+            
+            # Create a temporary directory for this binary and docs/metadata files
+            local temp_bin_dir=$(mktemp -d)
+            echo "Mock binary content for $binary_name" > "$temp_bin_dir/$binary_name"
+            echo "README for $binary_name" > "$temp_bin_dir/README.md"
+            echo "README (uppercase extension) for $binary_name" > "$temp_bin_dir/README.MD"
+            echo "Notes (uppercase extension) for $binary_name" > "$temp_bin_dir/NOTES.TXT"
+            echo "License text for $binary_name" > "$temp_bin_dir/LICENSE"
+            chmod +x "$temp_bin_dir/$binary_name"
+            
+            # Create tar.gz file with the mock binary plus non-binary files
+            tar -czf "temp_releases/releases/$filename" -C "$temp_bin_dir" \
+                "$binary_name" "README.md" "README.MD" "NOTES.TXT" "LICENSE"
+            rm -rf "$temp_bin_dir"
+        }
+
+        create_mock_tgz_with_invalid_files() {
+            local filename="$1"
+            local binary_name="${filename%.tar.gz}"
+
+            local temp_bin_dir=$(mktemp -d)
+            echo "Mock binary content for $binary_name" > "$temp_bin_dir/$binary_name"
+            chmod +x "$temp_bin_dir/$binary_name"
+            # Allowed supplementary files
+            echo "README" > "$temp_bin_dir/README.md"
+            echo "License" > "$temp_bin_dir/LICENSE"
+            # Invalid: space in filename
+            echo "bad" > "$temp_bin_dir/bad file.txt"
+            # Invalid: not in supplementary allowlist
+            echo "changelog" > "$temp_bin_dir/CHANGELOG.md"
+            # Invalid: not in supplementary allowlist
+            echo "release notes" > "$temp_bin_dir/RELEASE_NOTES.TXT"
+
+            tar -czf "temp_releases/releases/$filename" -C "$temp_bin_dir" \
+                "$binary_name" "README.md" "LICENSE" "bad file.txt" "CHANGELOG.md" "RELEASE_NOTES.TXT"
+            rm -rf "$temp_bin_dir"
+        }
+
         create_mock_tar() {
             local filename="$1"
             local binary_name="${filename%.tar}"
@@ -93,7 +134,17 @@ EOF
             rm -rf "$temp_bin_dir"
         }
         
-        if [[ "$*" =~ tarinput12345 ]]; then
+        if [[ "$*" =~ sanitizetest456 ]]; then
+            # Test component with invalid filenames that should be sanitized
+            create_mock_tgz_with_invalid_files "sanitizetest-binary-windows-amd64.tar.gz"
+            create_mock_tgz_with_invalid_files "sanitizetest-binary-darwin-amd64.tar.gz"
+            create_mock_tgz_with_invalid_files "sanitizetest-binary-linux-amd64.tar.gz"
+        elif [[ "$*" =~ readmetest789 ]]; then
+            # Test component with mixed-case docs and LICENSE alongside binaries
+            create_mock_tgz_with_non_binary_files "readmetest-binary-windows-amd64.tar.gz"
+            create_mock_tgz_with_non_binary_files "readmetest-binary-darwin-amd64.tar.gz"
+            create_mock_tgz_with_non_binary_files "readmetest-binary-linux-amd64.tar.gz"
+        elif [[ "$*" =~ tarinput12345 ]]; then
             # Test component with uncompressed .tar input files
             create_mock_tar "tartest-binary-windows-amd64.tar"
             create_mock_tar "tartest-binary-darwin-amd64.tar"
@@ -147,6 +198,18 @@ function oras() {
         exit 1
     elif [[ "$*" == "pull --registry-config"* ]]; then
         echo "Mocking pulling files"
+        if [[ "$4" =~ "sanitizetest456" ]]; then
+            touch sanitizetest-binary-windows-amd64.zip
+            touch sanitizetest-binary-darwin-amd64.tar.gz
+            touch sanitizetest-binary-linux-amd64.tar.gz
+        fi
+
+        if [[ "$4" =~ "readmetest789" ]]; then
+            touch readmetest-binary-windows-amd64.zip
+            touch readmetest-binary-darwin-amd64.tar.gz
+            touch readmetest-binary-linux-amd64.tar.gz
+        fi
+
         if [[ "$4" =~ "ghijkl67890" ]]; then
             touch testproduct2-binary-windows-amd64.zip
             touch testproduct2-binary-darwin-amd64.tar.gz
@@ -185,7 +248,27 @@ function oras() {
             mkdir -p "$output_dir"
             # Determine component from the pull URL
             # Files should be in os/arch/ structure within the output directory
-            if [[ "$*" =~ testproduct2/signed ]]; then
+            if [[ "$*" =~ sanitizetest/signed ]]; then
+                mkdir -p "$output_dir/macos/amd64" "$output_dir/windows/amd64"
+                touch "$output_dir/macos/amd64/sanitizetest-binary-darwin-amd64"
+                echo "README" > "$output_dir/macos/amd64/README.md"
+                echo "License" > "$output_dir/macos/amd64/LICENSE"
+                touch "$output_dir/windows/amd64/sanitizetest-binary-windows-amd64.exe"
+                echo "README" > "$output_dir/windows/amd64/README.md"
+                echo "License" > "$output_dir/windows/amd64/LICENSE"
+            elif [[ "$*" =~ readmetest/signed ]]; then
+                mkdir -p "$output_dir/macos/amd64" "$output_dir/windows/amd64"
+                touch "$output_dir/macos/amd64/readmetest-binary-darwin-amd64"
+                echo "README for darwin" > "$output_dir/macos/amd64/README.md"
+                echo "README uppercase extension for darwin" > "$output_dir/macos/amd64/README.MD"
+                echo "notes uppercase extension for darwin" > "$output_dir/macos/amd64/NOTES.TXT"
+                echo "License text for darwin" > "$output_dir/macos/amd64/LICENSE"
+                touch "$output_dir/windows/amd64/readmetest-binary-windows-amd64.exe"
+                echo "README for windows" > "$output_dir/windows/amd64/README.md"
+                echo "README uppercase extension for windows" > "$output_dir/windows/amd64/README.MD"
+                echo "notes uppercase extension for windows" > "$output_dir/windows/amd64/NOTES.TXT"
+                echo "License text for windows" > "$output_dir/windows/amd64/LICENSE"
+            elif [[ "$*" =~ testproduct2/signed ]]; then
                 mkdir -p "$output_dir/macos/amd64" "$output_dir/windows/amd64"
                 touch "$output_dir/macos/amd64/testproduct2-binary-darwin-amd64"
                 touch "$output_dir/windows/amd64/testproduct2-binary-windows-amd64.exe"
@@ -208,7 +291,27 @@ function oras() {
         echo Simulating oras pull
         # Determine component from the pull URL and create appropriate files
         # Files should be in os/arch/ structure (e.g., windows/amd64/, macos/amd64/)
-        if [[ "$*" =~ testproduct2/signed ]] || [[ "$*" =~ testproduct2/unsigned ]]; then
+        if [[ "$*" =~ sanitizetest/signed ]] || [[ "$*" =~ sanitizetest/unsigned ]]; then
+            mkdir -p windows/amd64 macos/amd64
+            touch windows/amd64/sanitizetest-binary-windows-amd64.exe
+            echo "README" > windows/amd64/README.md
+            echo "License" > windows/amd64/LICENSE
+            touch macos/amd64/sanitizetest-binary-darwin-amd64
+            echo "README" > macos/amd64/README.md
+            echo "License" > macos/amd64/LICENSE
+        elif [[ "$*" =~ readmetest/signed ]] || [[ "$*" =~ readmetest/unsigned ]]; then
+            mkdir -p windows/amd64 macos/amd64
+            touch windows/amd64/readmetest-binary-windows-amd64.exe
+            echo "README for windows" > windows/amd64/README.md
+            echo "README uppercase extension for windows" > windows/amd64/README.MD
+            echo "notes uppercase extension for windows" > windows/amd64/NOTES.TXT
+            echo "License text for windows" > windows/amd64/LICENSE
+            touch macos/amd64/readmetest-binary-darwin-amd64
+            echo "README for darwin" > macos/amd64/README.md
+            echo "README uppercase extension for darwin" > macos/amd64/README.MD
+            echo "notes uppercase extension for darwin" > macos/amd64/NOTES.TXT
+            echo "License text for darwin" > macos/amd64/LICENSE
+        elif [[ "$*" =~ testproduct2/signed ]] || [[ "$*" =~ testproduct2/unsigned ]]; then
             mkdir -p windows/amd64 macos/amd64
             touch windows/amd64/testproduct2-binary-windows-amd64.exe
             touch macos/amd64/testproduct2-binary-darwin-amd64

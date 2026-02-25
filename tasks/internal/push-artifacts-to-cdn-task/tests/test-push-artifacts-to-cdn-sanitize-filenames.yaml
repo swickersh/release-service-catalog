@@ -1,0 +1,105 @@
+---
+apiVersion: tekton.dev/v1
+kind: Pipeline
+metadata:
+  name: test-push-artifacts-to-cdn-sanitize-filenames
+spec:
+  description: |
+    Test that archives containing files with invalid characters (spaces, special
+    chars) and non-allowlisted supplementary files (e.g., CHANGELOG.md,
+    RELEASE_NOTES.TXT) are sanitized after extraction. Invalid files are removed
+    before reaching signing, checksums, compression, or publishing. Only files
+    matching the exact supplementary allowlist (README.md, README.MD, readme.md,
+    readme.MD, LICENSE, license, LICENSE.TXT, LICENSE.txt) and binaries with
+    portable filenames survive sanitization.
+  tasks:
+    - name: run-task
+      taskRef:
+        name: push-artifacts-to-cdn-task
+      params:
+        - name: snapshot_json
+          value: >-
+            {
+              "application": "sanitize-filenames-test",
+              "artifacts": {},
+              "components": [
+                {
+                  "containerImage": "quay.io/org/tenant/test@sha256:sanitizetest456",
+                  "contentGateway": {
+                    "productCode": "Code",
+                    "productName": "SanitizeTest",
+                    "productVersionName": "1.0-staging"
+                  },
+                  "name": "sanitizetest",
+                  "staged": {
+                    "destination": "sanitizetest-amd64",
+                    "version": "1.0"
+                  },
+                  "files": [
+                    {
+                      "filename": "sanitizetest-binary-windows-amd64.tar.gz",
+                      "source": "/releases/sanitizetest-binary-windows-amd64.tar.gz",
+                      "os": "windows",
+                      "arch": "amd64"
+                    },
+                    {
+                      "filename": "sanitizetest-binary-darwin-amd64.tar.gz",
+                      "source": "/releases/sanitizetest-binary-darwin-amd64.tar.gz",
+                      "os": "darwin",
+                      "arch": "amd64"
+                    },
+                    {
+                      "filename": "sanitizetest-binary-linux-amd64.tar.gz",
+                      "source": "/releases/sanitizetest-binary-linux-amd64.tar.gz",
+                      "os": "linux",
+                      "arch": "amd64"
+                    }
+                  ]
+                }
+              ]
+            }
+        - name: exodusGwSecret
+          value: "pulp-task-exodus-secret"
+        - name: exodusGwEnv
+          value: "pre"
+        - name: pulpSecret
+          value: "pulp-task-pulp-secret"
+        - name: udcacheSecret
+          value: "pulp-task-udc-secret"
+        - name: cgwHostname
+          value: "https://content-gateway.com"
+        - name: cgwSecret
+          value: "pulp-task-cgw-secret"
+        - name: author
+          value: testuser
+        - name: signingKeyName
+          value: testkey
+    - name: check-result
+      runAfter:
+        - run-task
+      params:
+        - name: result
+          value: $(tasks.run-task.results.result)
+      taskSpec:
+        params:
+          - name: result
+            type: string
+        steps:
+          - name: check-result
+            image: quay.io/konflux-ci/release-service-utils@sha256:5546fa78d3c88d7b6a2e8cff8902f7757f00541d0bbaf113b9f293133894afa3
+            script: |
+              #!/usr/bin/env bash
+              set -ex
+
+              # Archives contained files with spaces ("bad file.txt"),
+              # non-allowlisted supplementary files (CHANGELOG.md,
+              # RELEASE_NOTES.TXT), and valid supplementary files (README.md,
+              # LICENSE). The sanitizer should have removed the invalid files
+              # and the pipeline should complete successfully.
+              if [[ "$(params.result)" != "Success" ]]; then
+                echo "Error: expected Success but got: $(params.result)"
+                echo "Sanitization should have removed invalid files before signing"
+                exit 1
+              fi
+
+              echo "Test passed: Pipeline succeeded after sanitizing invalid filenames"
