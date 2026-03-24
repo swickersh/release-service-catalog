@@ -12,6 +12,8 @@ The following integration test suites are available:
 - **[rh-push-to-external-registry](rh-push-to-external-registry/)** - Tests for pushing to external registries
 - **[release-to-github](release-to-github/)** - Tests for GitHub release pipeline
 - **[rhtap-service-push](rhtap-service-push/)** - Tests for RHTAP service push pipeline
+- **[rh-push-to-registry-redhat-io](rh-push-to-registry-redhat-io/)** - End-to-end test for `rh-push-to-registry-redhat-io`: real repos, images pushed to `quay.io/redhat-pending`, staging Pyxis (fixture is a **Dockerfile** container image, not Helm).
+- **[rh-push-helm-chart-to-registry-redhat-io](rh-push-helm-chart-to-registry-redhat-io/)** - Same harness as rh-push, but `ReleasePlanAdmission` points at [`pipelines/managed/rh-push-helm-chart-to-registry-redhat-io/`](../pipelines/managed/rh-push-helm-chart-to-registry-redhat-io/); RPA mapping targets Helm OCI (`rh-push-helm-e2e-fixture` / tag `0.1.0_e2e001`). Clones template from **`e2e-base`** (`component_base_repo_name` in [`test.env`](rh-push-helm-chart-to-registry-redhat-io/test.env)); branch **`rh-push-helm-chart-to-registry-redhat-io-base`** must include a Konflux **Helm OCI** build (see suite README). Cluster `stg-rh01`; `KUBECONFIG` e.g. `~/.kube/config-stg-rh01`; namespaces `dev-release-team-tenant` / `managed-release-team-tenant`. After `--skip-cleanup`, clean up with [`utils/cleanup-resources.sh`](utils/cleanup-resources.sh) and [`../scripts/delete-branches.sh`](../scripts/delete-branches.sh).
 - **[rh-advisories-large-snapshot](rh-advisories-large-snapshot/)** - **Manual test** for rh-advisories pipeline with large snapshots (~200 components)
   - **Trigger**: Comment `/test-large-snapshot` on any PR
   - **Duration**: 4-8 hours

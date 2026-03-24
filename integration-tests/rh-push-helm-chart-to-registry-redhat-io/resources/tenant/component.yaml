@@ -1,0 +1,23 @@
+---
+apiVersion: appstudio.redhat.com/v1alpha1
+kind: Component
+metadata:
+  annotations:
+    git-provider: github
+    build.appstudio.openshift.io/request: configure-pac
+    image.redhat.com/generate: '{"visibility": "public"}'
+    # Must be a pipeline that runs build-helm-chart-oci-ta (Helm OCI). Name must exist in the cluster
+    # build-pipeline-config; adjust if your Konflux instance uses a different label.
+    build.appstudio.openshift.io/pipeline: '{"name": "helm-chart-oci-ta", "bundle": "latest"}'
+  name: ${component_name}
+  labels:
+    originating-tool: "${originating_tool}"
+spec:
+  application: ${application_name}
+  componentName: ${component_name}
+  secret: pipelines-as-code-secret-${component_name}
+  source:
+    git:
+      context: ./
+      revision: ${component_branch}
+      url: "${component_git_url}"

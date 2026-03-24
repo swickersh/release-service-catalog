@@ -1,6 +1,7 @@
 **/secrets
 .idea
 .serena
+integration-tests/.vault_pass
 
 # Local testing artifacts
 venv/
