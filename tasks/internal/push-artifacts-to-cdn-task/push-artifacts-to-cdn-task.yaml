@@ -1340,7 +1340,7 @@ spec:
         echo "$SNAPSHOT_JSON" > /shared/snapshot.json
 
     - name: push-artifacts
-      image: quay.io/konflux-ci/release-service-utils@sha256:ada350d0170351c4f8ce5f57e52bb287ad9fb8418a8c5f6ca1d2e2683cb697ea
+      image: quay.io/redhat-user-workloads/rhtap-release-2-tenant/release-service-utils-standalone:on-pr-5e355ae3e4becd3537001a2f9b4489dd24183ede
       computeResources:
         limits:
           memory: 512Mi
