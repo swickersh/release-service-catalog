@@ -179,7 +179,7 @@ spec:
 
   steps:
     - name: extract-artifacts
-      image: quay.io/konflux-ci/release-service-utils@sha256:5546fa78d3c88d7b6a2e8cff8902f7757f00541d0bbaf113b9f293133894afa3
+      image: quay.io/redhat-user-workloads/rhtap-release-2-tenant/release-service-utils-standalone@sha256:1b365d41e2ddf94d26ec86ed6d1db6cccd57c654e6e647e87e66aa722a59aecc
       securityContext:
         runAsUser: 1001
       computeResources:
@@ -402,7 +402,7 @@ spec:
           fi
         done
     - name: push-unsigned-using-oras
-      image: quay.io/konflux-ci/release-service-utils@sha256:5546fa78d3c88d7b6a2e8cff8902f7757f00541d0bbaf113b9f293133894afa3
+      image: quay.io/redhat-user-workloads/rhtap-release-2-tenant/release-service-utils-standalone@sha256:1b365d41e2ddf94d26ec86ed6d1db6cccd57c654e6e647e87e66aa722a59aecc
       computeResources:
         limits:
           memory: 512Mi
@@ -601,7 +601,7 @@ spec:
           fi
         done
     - name: sign-mac-binaries
-      image: quay.io/konflux-ci/release-service-utils@sha256:5546fa78d3c88d7b6a2e8cff8902f7757f00541d0bbaf113b9f293133894afa3
+      image: quay.io/redhat-user-workloads/rhtap-release-2-tenant/release-service-utils-standalone@sha256:1b365d41e2ddf94d26ec86ed6d1db6cccd57c654e6e647e87e66aa722a59aecc
       computeResources:
         limits:
           memory: 512Mi
@@ -778,7 +778,7 @@ spec:
           fi
         done
     - name: sign-windows-binaries
-      image: quay.io/konflux-ci/release-service-utils@sha256:5546fa78d3c88d7b6a2e8cff8902f7757f00541d0bbaf113b9f293133894afa3
+      image: quay.io/redhat-user-workloads/rhtap-release-2-tenant/release-service-utils-standalone@sha256:1b365d41e2ddf94d26ec86ed6d1db6cccd57c654e6e647e87e66aa722a59aecc
       computeResources:
         limits:
           memory: 512Mi
@@ -941,7 +941,7 @@ spec:
             Remove-Item -LiteralPath ${WINDOWS_SIGNING_SCRIPT_PATH} -Force"
         done
     - name: generate-checksums
-      image: quay.io/konflux-ci/release-service-utils@sha256:5546fa78d3c88d7b6a2e8cff8902f7757f00541d0bbaf113b9f293133894afa3
+      image: quay.io/redhat-user-workloads/rhtap-release-2-tenant/release-service-utils-standalone@sha256:1b365d41e2ddf94d26ec86ed6d1db6cccd57c654e6e647e87e66aa722a59aecc
       computeResources:
         limits:
           memory: 512Mi
@@ -1152,7 +1152,7 @@ spec:
         done
 
     - name: compress-artifacts
-      image: quay.io/konflux-ci/release-service-utils@sha256:5546fa78d3c88d7b6a2e8cff8902f7757f00541d0bbaf113b9f293133894afa3
+      image: quay.io/redhat-user-workloads/rhtap-release-2-tenant/release-service-utils-standalone@sha256:1b365d41e2ddf94d26ec86ed6d1db6cccd57c654e6e647e87e66aa722a59aecc
       computeResources:
         limits:
           memory: 512Mi
@@ -1340,7 +1340,7 @@ spec:
         echo "$SNAPSHOT_JSON" > /shared/snapshot.json
 
     - name: push-artifacts
-      image: quay.io/konflux-ci/release-service-utils@sha256:ada350d0170351c4f8ce5f57e52bb287ad9fb8418a8c5f6ca1d2e2683cb697ea
+      image: quay.io/redhat-user-workloads/rhtap-release-2-tenant/release-service-utils-standalone@sha256:1b365d41e2ddf94d26ec86ed6d1db6cccd57c654e6e647e87e66aa722a59aecc
       computeResources:
         limits:
           memory: 512Mi

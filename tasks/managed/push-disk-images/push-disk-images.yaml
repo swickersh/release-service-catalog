@@ -115,7 +115,7 @@ spec:
         - name: sourceDataArtifact
           value: $(params.sourceDataArtifact)
     - name: run-script
-      image: quay.io/konflux-ci/release-service-utils@sha256:5546fa78d3c88d7b6a2e8cff8902f7757f00541d0bbaf113b9f293133894afa3
+      image: quay.io/redhat-user-workloads/rhtap-release-2-tenant/release-service-utils-standalone@sha256:5f1ad55b57a7ffafb1e04226f8c4547965a465d6b79d3e8c3e301e99e3b674e1
       computeResources:
         limits:
           memory: 512Mi
@@ -156,8 +156,8 @@ spec:
           exodusGwEnv="pre"
           pulpSecret="rhsm-pulp-stage-secret"
           udcacheSecret="udcache-stage-secret"
-          cgwHostname="https://developers.redhat.com/content-gateway/rest/admin"
-          cgwSecret="cgw-service-account-prod-secret"
+          cgwHostname="https://developers.qa.redhat.com/content-gateway/rest/admin"
+          cgwSecret="cgw-service-account-stage-secret"
         elif [ "${env}" = "qa" ]; then
           exodusGwSecret="exodus-stage-secret"
           exodusGwEnv="live"

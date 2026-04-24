@@ -86,7 +86,7 @@ spec:
 
   steps:
     - name: pull-and-push-images
-      image: quay.io/konflux-ci/release-service-utils@sha256:5546fa78d3c88d7b6a2e8cff8902f7757f00541d0bbaf113b9f293133894afa3
+      image: quay.io/redhat-user-workloads/rhtap-release-2-tenant/release-service-utils-standalone@sha256:5f1ad55b57a7ffafb1e04226f8c4547965a465d6b79d3e8c3e301e99e3b674e1
       computeResources:
         limits:
           memory: 512Mi
@@ -262,6 +262,13 @@ spec:
           filePrefix="$(jq -er '.contentGateway.filePrefix' <<< "${COMPONENT}")" \
             || (echo "Missing contentGateway.filePrefix value for component. This should be the prefix for files to \
                   upload to the Developer Portal. Failing" && exit 1)
+
+          # Set proxy for preprod CGW environment (requires squid proxy for access)
+          if [[ "$(params.cgwHostname)" == *"developers.qa.redhat.com"* ]]; then
+            export HTTP_PROXY="http://squid.corp.redhat.com:3128"
+            export HTTPS_PROXY="http://squid.corp.redhat.com:3128"
+            echo "Using squid proxy for preprod CGW access"
+          fi
 
           developer_portal_wrapper --debug --product-name "${productName}" \
             --product-code "${productCode}" \
