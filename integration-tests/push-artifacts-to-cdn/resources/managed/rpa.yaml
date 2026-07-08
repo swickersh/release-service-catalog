@@ -79,6 +79,26 @@ spec:
             productVersionName: "1.0"
             contentType: "binary"
           pushSourceContainer: false
+        # Component 3: releases a single disk image file to CGW only.
+        # It has contentGateway.contentType: disk-image, which exercises the disk
+        # image code path in extract_artifacts.py, compress_artifacts.py, and
+        # push_unsigned.py (disk images pass through without compression).
+        - name: ${component3_name}
+          files:
+            # Path inside the container image (built from e2e-base
+            # push-artifacts-to-cdn-comp3-base branch).
+            # Disk images must always use os: linux — see extract_artifacts.py
+            # _validate_disk_image_components.
+            - source: /releases/e2e-cdn-comp3-rhel10-x86_64.qcow2
+              arch: amd64
+              os: linux
+          contentGateway:
+            # Same CGW product as the other components.
+            productName: "Konflux Release E2E test product"
+            productCode: "KonfluxReleaseE2E"
+            productVersionName: "1.0"
+            contentType: "disk-image"
+          pushSourceContainer: false
     releaseNotes:
       product_id:
         - 10681
